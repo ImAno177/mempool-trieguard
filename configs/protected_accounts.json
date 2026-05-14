@@ -1,0 +1,16 @@
+[
+  {
+    "victim": "0xccb720974f3809b8fc33c68f51bba62ba8e4bb6e",
+    "recipient": "0x12e49c72b0aca9b163fcf4025114e02907475b4a",
+    "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "last_seen": "2024-01-01T00:00:00Z",
+    "observed_freq": 3
+  },
+  {
+    "victim": "0xccb720974f3809b8fc33c68f51bba62ba8e4bb6e",
+    "recipient": "0x298fdc3c0fb5ee49a6175fa512e37cc79fd0903a",
+    "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "last_seen": "2024-01-02T00:00:00Z",
+    "observed_freq": 2
+  }
+]

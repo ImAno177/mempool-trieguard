@@ -1,0 +1,38 @@
+mode: local-benchmark
+listen_addr: ":8080"
+data_dir: "./data"
+db_path: "./data/app.db"
+protected_accounts_path: "./configs/protected_accounts.json"
+max_alerts_in_memory: 2000
+
+basic_auth:
+  user: "admin"
+  pass: "change-me"
+
+drpc:
+  http_url: ""
+  wss_url: ""
+  key: ""
+
+detector:
+  window_days: 30
+  kp: 6
+  ks: 6
+  theta_p: 4
+  theta_s: 4
+  min_prefix_depth: 3
+  min_suffix_depth: 3
+  max_candidates_per_side: 2048
+  tau: 0.70
+  lambda: 604800
+  weights: [0.30, 0.20, 0.20, 0.15, 0.15]
+  tiny_value: 10.0
+
+benchmark:
+  delay_profiles_seconds: [5, 15, 30]
+  bootstrap_samples: 10000
+  benchmark_runs: 30
+  random_seed: 42
+
+live:
+  subscription_name: "drpc_pendingTransactions"

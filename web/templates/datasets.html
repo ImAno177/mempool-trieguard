@@ -1,0 +1,10 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Datasets</title><style>body{font-family:"IBM Plex Sans","Segoe UI",sans-serif;padding:20px} table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px solid #ddd} a{color:#0f766e}</style></head>
+<body>
+<h2>Datasets</h2>
+<p><a href="/">Back</a></p>
+<table>
+<tr><th>Name</th><th>Path</th><th>Size (bytes)</th></tr>
+{{range .Datasets}}<tr><td>{{.Name}}</td><td>{{.Path}}</td><td>{{.Size}}</td></tr>{{else}}<tr><td colspan="3">No dataset files found.</td></tr>{{end}}
+</table>
+</body></html>

@@ -1,0 +1,50 @@
+﻿.env
+.env.*
+!.env.example
+
+# Large local datasets and generated artifacts
+data/
+results/
+29212703/
+29212703.zip
+
+# Build outputs
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Local databases and runtime data
+*.db
+*.sqlite
+*.sqlite3
+
+# Caches
+.gocache/
+.uv-cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# LaTeX generated files
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+
+# Manuscript drafts are kept local, not published in the code repo
+paper/

@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mempool-TrieGuard Dashboard</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <style>
+    :root { --bg:#f3f4f6; --card:#ffffff; --ink:#111827; --muted:#6b7280; --accent:#0f766e; --danger:#b91c1c; }
+    body { margin:0; font-family: "IBM Plex Sans", "Segoe UI", sans-serif; color:var(--ink); background:linear-gradient(120deg,#ecfeff 0%, #eef2ff 55%, #fefce8 100%);} 
+    .wrap { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap:16px; }
+    .card { background:var(--card); border-radius:14px; padding:16px; box-shadow:0 8px 24px rgba(15,23,42,0.08);} 
+    .muted { color:var(--muted); font-size:13px; }
+    .pill { display:inline-block; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; }
+    .ok { background:#dcfce7; color:#166534; }
+    .bad { background:#fee2e2; color:#991b1b; }
+    table { width:100%; border-collapse: collapse; font-size:13px; }
+    th, td { text-align:left; padding:8px; border-bottom:1px solid #e5e7eb; }
+    a { color:#0f766e; text-decoration:none; font-weight:600; }
+    .actions { display:flex; gap:8px; }
+    button { border:none; border-radius:10px; padding:10px 14px; font-weight:700; cursor:pointer; }
+    .start { background:#14b8a6; color:white; }
+    .stop { background:#ef4444; color:white; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Mempool-TrieGuard</h1>
+  <p class="muted">{{.Now.UTC.Format "2006-01-02 15:04:05"}} UTC · mode={{.Config.Mode}} · subscription={{.Config.Live.SubscriptionName}}</p>
+  <p><a href="/datasets">Datasets</a> · <a href="/runs">Runs</a> · <a href="/config">Config Import</a> · <a href="/api/smoke">dRPC Smoke JSON</a></p>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Live Status</h3>
+      <p>Running: {{if .Status.Running}}<span class="pill ok">YES</span>{{else}}<span class="pill bad">NO</span>{{end}}</p>
+      <p>Connected: {{if .Status.Connected}}<span class="pill ok">YES</span>{{else}}<span class="pill bad">NO</span>{{end}}</p>
+      <p class="muted">subscription_id={{.Status.SubscriptionID}}</p>
+      <p class="muted">last_error={{.Status.LastError}}</p>
+      <p class="muted">messages={{.Status.TotalMessages}} alerts={{.Status.TotalAlerts}}</p>
+      <div class="actions">
+        <form method="post" action="/live/start"><button class="start" type="submit">Start Live</button></form>
+        <form method="post" action="/live/stop"><button class="stop" type="submit">Stop Live</button></form>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Detector</h3>
+      <p class="muted">kp={{.Config.Detector.KP}} ks={{.Config.Detector.KS}} theta_p={{.Config.Detector.ThetaP}} theta_s={{.Config.Detector.ThetaS}}</p>
+      <p class="muted">tau={{printf "%.3f" .Config.Detector.Tau}} lambda={{printf "%.0f" .Config.Detector.Lambda}}</p>
+      <p class="muted">weights={{range $i,$v := .Config.Detector.Weights}}{{if $i}}, {{end}}{{printf "%.2f" $v}}{{end}}</p>
+      <p class="muted">protected={{.Config.ProtectedAccounts}}</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h3>Latest Alerts</h3>
+    <table>
+      <tr><th>Observed</th><th>Victim</th><th>Lookalike</th><th>Matched</th><th>Score</th></tr>
+      {{range .Alerts}}
+      <tr>
+        <td>{{.ObservedAt.UTC.Format "15:04:05"}}</td>
+        <td>{{.Victim}}</td>
+        <td>{{.Lookalike}}</td>
+        <td>{{.MatchedRecipient}}</td>
+        <td>{{printf "%.3f" .Score.Total}}</td>
+      </tr>
+      {{else}}
+      <tr><td colspan="5" class="muted">No alerts yet.</td></tr>
+      {{end}}
+    </table>
+  </div>
+</div>
+</body>
+</html>

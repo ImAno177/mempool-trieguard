@@ -1,0 +1,17 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Config</title><style>body{font-family:"IBM Plex Sans","Segoe UI",sans-serif;padding:20px} table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px solid #ddd} input,button{padding:8px} a{color:#0f766e}</style></head>
+<body>
+<h2>Config Import (best_config.yaml)</h2>
+<p><a href="/">Back</a></p>
+<form method="post" action="/config/import" enctype="multipart/form-data">
+  <label>Operator:</label>
+  <input type="text" name="operator" value="ui" />
+  <input type="file" name="config_file" accept=".yaml,.yml" required />
+  <button type="submit">Import + Apply</button>
+</form>
+<h3>Config Versions</h3>
+<table>
+<tr><th>ID</th><th>Created</th><th>Operator</th><th>SHA256</th><th>Source</th><th>Active</th></tr>
+{{range .Configs}}<tr><td>{{.ID}}</td><td>{{.CreatedAt.UTC.Format "2006-01-02 15:04:05"}}</td><td>{{.Operator}}</td><td>{{.SHA256}}</td><td>{{.Source}}</td><td>{{if .IsActive}}yes{{else}}no{{end}}</td></tr>{{else}}<tr><td colspan="6">No config versions yet.</td></tr>{{end}}
+</table>
+</body></html>
