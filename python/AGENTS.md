@@ -47,7 +47,8 @@
 
 ## Local Result Artifacts
 
-- Fixed-threshold full-label run: `results/full_label_full_dataset_20260514_tau040`.
+- Current fixed-threshold full-label artifacts used by the manuscript: `results/full_label_daily_rerun_20260525_tau040`.
+- Earlier fixed-threshold full-label run: `results/full_label_full_dataset_20260514_tau040`.
 - Exploratory tau sweep: `results/full_label_tau_sweep_20260523`.
 - Per-wallet RQ2 scaling and operational overhead: `results/missing_experiments_20260523`.
 - The missing-experiment artifact is local and ignored by Git; its headline 10,000-counterparty result is `mempool_trieguard` lookup mean `0.000668` ms versus `linear_scan` `0.211963` ms.

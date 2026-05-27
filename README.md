@@ -155,6 +155,7 @@ Main current result from the last full run:
 - `mempool_trieguard`: precision `0.999214`, recall `0.957280`, F1 `0.977797`.
 - `linear_scan`: precision `0.978671`, recall `0.965444`, F1 `0.972012`.
 - `confirmed_chain`: precision `1.000000`, recall `0.283724`, F1 `0.442033`.
+- RQ2 aggregate lookup used in the current manuscript: `mempool_trieguard` mean `0.003023` ms, p95 `0.000000` ms, p99 `0.000092` ms, throughput `191,953.44` TPS, average candidates `2.80`; `linear_scan` mean `0.143894` ms, p95 `1.070443` ms, p99 `2.258818` ms, throughput `35,475.12` TPS, average candidates `97.32`.
 - RQ3 caveat: `address_only_trie` reaches F1 `0.978089`, slightly above the current full risk score. Treat this as a risk-score calibration finding, not as evidence to tune thresholds per method for RQ comparisons.
 
 See [Progress handoff](docs/PROGRESS.md) for interpretation and next improvements.
@@ -212,7 +213,7 @@ Operational overhead at `10,000` counterparties is `6.491340` ms mean load/updat
 
 ## Paper Draft
 
-A new local LaTeX draft was written at `paper/mempool_trieguard_full_dataset_paper_20260523.tex`. It reports the full-label run, the tau sweep, and the ablation caveat above. The newer per-wallet RQ2 scaling and overhead artifacts are ready under `results/missing_experiments_20260523` for the next manuscript revision. The `paper/` directory is ignored by Git in this checkout, so manuscript files are local artifacts unless the repository policy changes.
+The current local IEEEtran draft is `paper/paper.tex`. It reports the full-label run, aggregate RQ2 lookup p95/p99 values, per-wallet RQ2 scaling and overhead, tau sweep, RQ3 calibration caveat, replay limitation using `observed_at = block_time - delay`, and a code/data availability statement pointing to this repository. The `paper/` directory is ignored by Git in this checkout, so manuscript files and PDFs are local artifacts unless the repository policy changes.
 
 ## Artifacts And Dataset Policy
 

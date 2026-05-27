@@ -25,7 +25,7 @@
 - Full-label benchmark mode is implemented with victim sharding and resume-safe summary files.
 - Full dataset run completed locally with `34,905,969` rows.
 - Full-label tau sweep mode is implemented and completed for the current dataset at loss rate `0`.
-- A local LaTeX paper draft was written at `paper/mempool_trieguard_full_dataset_paper_20260523.tex`.
+- The current local IEEEtran paper draft is `paper/paper.tex`.
 - Manuscript files are local-only and excluded from the public code repo.
 - `results/` contains the run outputs locally but is ignored by Git.
 
@@ -110,20 +110,22 @@ Operational overhead:
 
 ## Paper Draft
 
-The current local manuscript draft is `paper/mempool_trieguard_full_dataset_paper_20260523.tex`. It includes:
+The current local manuscript draft is `paper/paper.tex`. It includes:
 
 - Full-label dataset scope and fixed-threshold RQ1-RQ4 results.
+- Aggregate RQ2 lookup mean/p95/p99, throughput, and candidate counts.
+- Per-wallet RQ2 scaling and operational-overhead tables from `results/missing_experiments_20260523`.
 - Exploratory tau sweep results.
 - A discussion explaining why ablations can slightly outperform the full method.
 - A proposed next risk-score direction that keeps address similarity as the core signal and uses contextual features as bounded modifiers.
-- The newer per-wallet RQ2 scaling and overhead artifacts are ready in `results/missing_experiments_20260523` for manuscript integration.
+- Replay wording based on `observed_at = block_time - delay`, with the live-mempool limitation stated explicitly.
+- A `Code and Data Availability` section pointing to the public GitHub repository while keeping raw datasets, caches, and generated results out of version control.
 
 ## What To Improve Next
 
 - Calibrate the risk score on held-out accounts/time ranges rather than tuning on the same full-label aggregate.
 - Test a bounded-modifier score where address similarity remains mandatory and token/type/time/value act as small boosts or penalties.
 - Add better token/counterfeit features so token context improves F1 instead of mainly providing explainability.
-- Integrate the new per-wallet scaling and operational-overhead tables into the manuscript if they are needed for the next paper revision.
 - Run live VPS validation with rotated dRPC key and Basic Auth.
 
 ## Do Not Commit

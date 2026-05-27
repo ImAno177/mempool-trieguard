@@ -52,7 +52,7 @@ Quy tac so sanh hien tai: cac bang RQ dung cung production threshold `tau=0.40`.
 1. Tai Blockchain Address Poisoning Companion Dataset cua Tsuchiya et al. tren Figshare.
 2. Lay Ethereum ERC-20 transfer logs trong khoang thoi gian tuong ung voi dataset.
 3. Thu thap pending transactions bang WebSocket `eth_subscribe` voi kenh `newPendingTransactions`.
-4. Neu khong co pending timestamp lich su, chay replay: dung block timestamp lam moc xac nhan va gia lap pending time theo log cua provider hien tai. Ghi ro han che nay trong bai bao.
+4. Neu khong co pending timestamp lich su, chay replay bang `observed_at = block_time - delay`. Ghi ro trong bai bao rang day la historical replay model, khong phai do propagation cua provider that.
 
 ## 5. Hien thuc detector
 
@@ -130,8 +130,8 @@ Bang RQ2 hien tai:
 
 | Method | Lookup mean ms | P95 ms | P99 ms | Throughput TPS | Avg candidates |
 |---|---:|---:|---:|---:|---:|
-| Linear scan | 0.095244 | 0.543809 | 1.431798 | 25,738.66 | 97.32 |
-| Mempool-TrieGuard | 0.004659 | 0.000000 | 0.014142 | 146,635.27 | 2.80 |
+| Linear scan | 0.143894 | 1.070443 | 2.258818 | 35,475.12 | 97.32 |
+| Mempool-TrieGuard | 0.003023 | 0.000000 | 0.000092 | 191,953.44 | 2.80 |
 
 Bang RQ2 scaling per-wallet bo sung, chay 30 lan tren shard `0036`, victim `0x79672062c5a45e3808d6b784129cf3ecf59d4224`, replay mau `10,000` event:
 
@@ -194,8 +194,8 @@ Bang RQ4 hien tai:
 | Chay full-label benchmark | Xong voi `tau=0.40` |
 | Chay tau sweep | Xong voi loss rate `0` |
 | Chay RQ2 scaling per-wallet va overhead | Xong trong `results/missing_experiments_20260523` |
-| Viet ban thao LaTeX | Da co file local `paper/mempool_trieguard_full_dataset_paper_20260523.tex` |
-| Review va polish ban thao | Con lai |
+| Viet ban thao LaTeX | Da co file local `paper/paper.tex` |
+| Review va polish ban thao | Da polish nhieu vong; chi con minor revision neu can |
 
 ## 12. Ket qua hien tai
 

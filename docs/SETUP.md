@@ -185,7 +185,8 @@ Main outputs:
 
 Current local result directories:
 
-- `results/full_label_full_dataset_20260514_tau040` - fixed-threshold full-label replay at `tau=0.40`.
+- `results/full_label_daily_rerun_20260525_tau040` - current fixed-threshold full-label replay artifacts used by the manuscript.
+- `results/full_label_full_dataset_20260514_tau040` - earlier fixed-threshold full-label replay at `tau=0.40`.
 - `results/full_label_tau_sweep_20260523` - exploratory threshold sweep at loss rate `0`.
 - `results/missing_experiments_20260523` - strict per-wallet RQ2 lookup scaling plus operational overhead.
 
@@ -221,4 +222,4 @@ On VPS, copy only code plus local runtime directories you intentionally need. Ke
 - Full-label run is slow: increase `--jobs` and use `--shard-batch-size 4`, but watch RAM.
 - Tau sweep is slow: pass `--full-label-source-results-dir` from a completed full-label run to reuse shards.
 - Docker cannot see dataset: mount local `29212703/`, `data/`, and `results/` as in `docker-compose.yml`.
-- LaTeX/PDF generation is not part of the public code repo; benchmark CSV/MD artifacts are generated under ignored `results/`.
+- LaTeX/PDF generation is not part of the public code repo. The current local draft is `paper/paper.tex`; benchmark CSV/MD artifacts are generated under ignored `results/`.

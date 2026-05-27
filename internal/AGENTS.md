@@ -38,7 +38,7 @@ This folder contains core Go packages: detector, benchmark metrics, live dRPC in
 
 ## Current RQ2 Position
 
-- Full-label aggregate lookup: `mempool_trieguard` mean `0.004659` ms vs `linear_scan` mean `0.095244` ms.
+- Full-label aggregate lookup used in the current manuscript: `mempool_trieguard` mean `0.003023` ms, p95 `0.000000` ms, p99 `0.000092` ms vs `linear_scan` mean `0.143894` ms, p95 `1.070443` ms, p99 `2.258818` ms.
 - Strict per-wallet scaling artifact: `results/missing_experiments_20260523`.
 - At 10,000 counterparties for the selected high-activity wallet, `mempool_trieguard` lookup mean is `0.000668` ms and `linear_scan` lookup mean is `0.211963` ms across 30 runs.
 - Operational overhead at 10,000 counterparties is `6.491340` ms mean load/update time and `160.88` KB heap per 1,000 counterparties.

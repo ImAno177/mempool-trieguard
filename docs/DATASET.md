@@ -137,7 +137,8 @@ If `--full-label-source-results-dir` contains `full_label_manifest.json` and `fu
 
 The current local benchmark outputs are intentionally kept under ignored `results/` directories:
 
-- `results/full_label_full_dataset_20260514_tau040` - full-label replay and fixed-threshold RQ1-RQ4 tables.
+- `results/full_label_daily_rerun_20260525_tau040` - current full-label replay artifacts used by the manuscript.
+- `results/full_label_full_dataset_20260514_tau040` - earlier full-label replay and fixed-threshold RQ tables.
 - `results/full_label_tau_sweep_20260523` - exploratory calibration sweep.
 - `results/missing_experiments_20260523` - per-wallet RQ2 scaling and operational-overhead tables.
 

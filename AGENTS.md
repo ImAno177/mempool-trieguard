@@ -48,11 +48,11 @@ The current full-label run used all labels in `data/normalized/address_poisoning
 
 - Dataset scope: `34,905,969` total rows, `17,365,954` positives, `17,516,047` negatives, `256` shards.
 - Fixed-threshold production result at `tau=0.40`: `mempool_trieguard` precision `0.999214`, recall `0.957280`, F1 `0.977797`.
-- Full-label aggregate RQ2 lookup: `mempool_trieguard` mean `0.004659` ms vs `linear_scan` mean `0.095244` ms.
+- Full-label aggregate RQ2 lookup used in the current manuscript: `mempool_trieguard` mean `0.003023` ms, p95 `0.000000` ms, p99 `0.000092` ms vs `linear_scan` mean `0.143894` ms, p95 `1.070443` ms, p99 `2.258818` ms.
 - Additional per-wallet RQ2 scaling and overhead artifacts are local at `results/missing_experiments_20260523`: at `10,000` counterparties, `mempool_trieguard` lookup mean `0.000668` ms vs `linear_scan` `0.211963` ms; load/update mean `6.491340` ms; heap `160.88` KB per 1,000 counterparties.
 - RQ3 caveat: `address_only_trie` reaches F1 `0.978089`, and `no_time` reaches F1 `0.978062`, so the current risk score should be described as needing calibration rather than as dominating every ablation.
 - Tau sweep result: `mempool_trieguard` best tau is `0.395` with F1 `0.977826`, only `+0.000029` over tau `0.40`.
-- Manuscript files are local-only and excluded from this code repository; current local draft is `paper/mempool_trieguard_full_dataset_paper_20260523.tex`.
+- Manuscript files are local-only and excluded from this code repository; current local draft is `paper/paper.tex`.
 
 
 
