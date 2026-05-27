@@ -816,9 +816,20 @@ def write_csv(path: Path, rows: List[dict]) -> None:
         writer.writerows(rows)
 
 
-def run_detector(detector_cli: str, config_path: Path, counterparties_path: Path, replay_path: Path, method: str, out_dir: Path, token_metadata_path: Path, no_alerts: bool = False) -> dict:
+def run_detector(
+    detector_cli: str,
+    config_path: Path,
+    counterparties_path: Path,
+    replay_path: Path,
+    method: str,
+    out_dir: Path,
+    token_metadata_path: Path,
+    no_alerts: bool = False,
+    day_boundaries_path: Path | None = None,
+) -> dict:
     summary_path = out_dir / f"summary_{method}.json"
-    if summary_path.exists():
+    daily_metrics_path = out_dir / f"daily_metrics_{method}.csv"
+    if summary_path.exists() and (day_boundaries_path is None or daily_metrics_path.exists()):
         return json.loads(summary_path.read_text(encoding="utf-8"))
     cmd = [
         detector_cli,
@@ -831,9 +842,32 @@ def run_detector(detector_cli: str, config_path: Path, counterparties_path: Path
     ]
     if no_alerts:
         cmd.append("--no-alerts")
+    if day_boundaries_path is not None:
+        cmd.extend(["--day-boundaries", str(day_boundaries_path)])
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(f"detector-cli failed ({method}, exit={proc.returncode}):\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
+    return json.loads(summary_path.read_text(encoding="utf-8"))
+
+
+def run_detector_tau_sweep(detector_cli: str, config_path: Path, counterparties_path: Path, replay_path: Path, method: str, out_dir: Path, token_metadata_path: Path, tau_grid: List[float]) -> dict:
+    summary_path = out_dir / f"tau_sweep_{method}.json"
+    if summary_path.exists():
+        return json.loads(summary_path.read_text(encoding="utf-8"))
+    cmd = [
+        detector_cli,
+        "--config", str(config_path),
+        "--counterparties", str(counterparties_path),
+        "--replay", str(replay_path),
+        "--method", method,
+        "--out", str(out_dir),
+        "--token-metadata", str(token_metadata_path),
+        "--tau-sweep",
+        "--tau-grid", ",".join(f"{float(t):.6f}" for t in tau_grid),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(f"detector-cli tau sweep failed ({method}, exit={proc.returncode}):\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
     return json.loads(summary_path.read_text(encoding="utf-8"))
 
 
@@ -1960,12 +1994,258 @@ def write_full_dataset_paper(source_tex: Path, dest_tex: Path, manifest: dict, r
     dest_tex.write_text(text, encoding="utf-8")
 
 
+def default_tau_sweep_grid() -> List[float]:
+    return [round(i * 0.005, 6) for i in range(201)]
+
+
+def add_tau_sweep_rows(aggregates: Dict[Tuple[str, float, float], dict], rows: List[dict], loss_rate: float) -> None:
+    weighted_fields = [
+        "lookup_mean_ms",
+        "lookup_p95_ms",
+        "lookup_p99_ms",
+        "throughput_tps",
+        "average_candidates_scored",
+        "estimated_memory_per_1k_counterparties_kb",
+    ]
+    count_fields = [
+        "tp",
+        "fp",
+        "fn",
+        "tn",
+        "total_events",
+        "positive_visible_events",
+        "positive_detected_events",
+        "positive_missed_no_candidate",
+        "positive_missed_below_tau",
+    ]
+    for row in rows:
+        method = str(row["method"])
+        tau = round(float(row["tau"]), 6)
+        key = (method, tau, float(loss_rate))
+        item = aggregates.setdefault(key, {"method": method, "tau": tau, "loss_rate": float(loss_rate)})
+        weight = float(row.get("total_events", 0) or 0)
+        for field in count_fields:
+            item[field] = int(item.get(field, 0)) + int(float(row.get(field, 0) or 0))
+        item["_weight"] = float(item.get("_weight", 0.0)) + weight
+        for field in weighted_fields:
+            item[f"_{field}_weighted"] = float(item.get(f"_{field}_weighted", 0.0)) + float(row.get(field, 0) or 0.0) * weight
+
+
+def finalize_tau_sweep_aggregates(aggregates: Dict[Tuple[str, float, float], dict]) -> List[dict]:
+    rows = []
+    for item in aggregates.values():
+        out = {k: v for k, v in item.items() if not k.startswith("_")}
+        tp = int(out.get("tp", 0))
+        fp = int(out.get("fp", 0))
+        fn = int(out.get("fn", 0))
+        tn = int(out.get("tn", 0))
+        precision = safe_div(tp, tp + fp)
+        recall = safe_div(tp, tp + fn)
+        out.update({
+            "positives": tp + fn,
+            "negatives": fp + tn,
+            "precision": precision,
+            "recall": recall,
+            "f1": safe_div(2 * precision * recall, precision + recall),
+            "specificity": safe_div(tn, fp + tn),
+            "fpr": safe_div(fp, fp + tn),
+            "fnr": safe_div(fn, tp + fn),
+        })
+        weight = float(item.get("_weight", 0.0))
+        for field in [
+            "lookup_mean_ms",
+            "lookup_p95_ms",
+            "lookup_p99_ms",
+            "throughput_tps",
+            "average_candidates_scored",
+            "estimated_memory_per_1k_counterparties_kb",
+        ]:
+            out[field] = safe_div(float(item.get(f"_{field}_weighted", 0.0)), weight)
+        rows.append(out)
+    return sorted(rows, key=lambda r: (str(r["method"]), float(r.get("loss_rate", 0)), float(r["tau"])))
+
+
+def best_tau_rows(rows: List[dict], baseline_tau: float = 0.40) -> List[dict]:
+    by_method: Dict[str, List[dict]] = defaultdict(list)
+    for row in rows:
+        if float(row.get("loss_rate", 0)) == 0.0:
+            by_method[str(row["method"])].append(row)
+    out = []
+    for method, arr in sorted(by_method.items()):
+        best = sorted(arr, key=lambda r: (float(r["f1"]), float(r["precision"]), -float(r["tau"])), reverse=True)[0]
+        baseline = min(arr, key=lambda r: abs(float(r["tau"]) - baseline_tau))
+        item = dict(best)
+        item["baseline_tau"] = float(baseline["tau"])
+        item["baseline_precision"] = float(baseline["precision"])
+        item["baseline_recall"] = float(baseline["recall"])
+        item["baseline_f1"] = float(baseline["f1"])
+        item["delta_f1_vs_baseline_tau"] = float(best["f1"]) - float(baseline["f1"])
+        out.append(item)
+    return out
+
+
+def write_tau_sweep_report(path: Path, best_rows: List[dict], baseline_tau: float = 0.40) -> None:
+    lines = [
+        "# Full-Label Tau Sweep",
+        "",
+        f"Scope: loss_rate=0, aggregated over full-label shards and replay delay profiles. Baseline tau for comparison is `{baseline_tau:.2f}`.",
+        "",
+        "| Method | Best tau | Precision | Recall | F1 | F1 at baseline tau | Delta F1 |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in best_rows:
+        lines.append(
+            f"| {row['method']} | {float(row['tau']):.6f} | {float(row['precision']):.6f} | "
+            f"{float(row['recall']):.6f} | {float(row['f1']):.6f} | "
+            f"{float(row['baseline_f1']):.6f} | {float(row['delta_f1_vs_baseline_tau']):+.6f} |"
+        )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def run_full_label_tau_sweep(args: argparse.Namespace, cfg: dict) -> int:
+    results_dir = Path(args.results_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+    source_results_dir = Path(args.full_label_source_results_dir) if args.full_label_source_results_dir else results_dir
+    dataset_cache_path = Path(args.dataset_cache) if args.dataset_cache else Path("data/normalized/address_poisoning_ethereum.normalized.full.parquet")
+    token_cache_path = Path(args.token_cache) if args.token_cache else Path("data/normalized/full_dataset_token_metadata_cache.json")
+    token_metadata = load_token_cache(token_cache_path)
+    print(f"[tau-sweep] using token metadata cache: {token_cache_path} ({len(token_metadata)} entries)")
+
+    tau_grid = parse_list_floats(args.tau_grid, default_tau_sweep_grid())
+    cfg_path = write_tau_config(cfg, 0.40, results_dir)
+    delays = [int(x) for x in cfg.get("benchmark", {}).get("delay_profiles_seconds", [5, 15, 30])]
+    loss_rates = parse_list_floats(args.loss_rates, [0.0])
+    benchmark_runs = args.benchmark_runs if args.benchmark_runs and args.benchmark_runs > 0 else 1
+    methods = [m.strip() for m in (args.methods or "mempool_trieguard,address_only_trie,prefix_only,suffix_only,no_token,no_time,no_value").split(",") if m.strip()]
+
+    manifest_path = source_results_dir / "full_label_manifest.json"
+    if manifest_path.exists() and (source_results_dir / "full_label_shards").exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        shard_root = source_results_dir / "full_label_shards"
+        print(f"[tau-sweep] reusing shards from {source_results_dir}")
+    else:
+        if not dataset_cache_path.exists():
+            raise FileNotFoundError(f"full normalized parquet not found: {dataset_cache_path}")
+        print("[tau-sweep] sharding normalized dataset")
+        manifest = write_full_label_shards_fast(dataset_cache_path, results_dir, int(args.shard_count), int(args.max_rows), token_metadata)
+        shard_root = results_dir / "full_label_shards"
+
+    print(
+        f"[tau-sweep] manifest rows={int(manifest.get('total_rows', 0)):,} "
+        f"positives={int(manifest.get('positives', 0)):,} negatives={int(manifest.get('negatives', 0)):,}"
+    )
+    print(f"[tau-sweep] methods={','.join(methods)} taus={len(tau_grid)} delays={','.join(str(x) for x in delays)}")
+
+    tmp_root = results_dir / "full_label_tau_sweep_tmp"
+    shard_entries = [s for s in manifest.get("shards", []) if int(s.get("events", 0)) > 0]
+    total_jobs = 0
+    for _run_id in range(benchmark_runs):
+        for _shard in shard_entries:
+            for _loss_rate in loss_rates:
+                total_jobs += len(delays) * len(methods)
+
+    aggregates: Dict[Tuple[str, float, float], dict] = {}
+    completed_jobs = 0
+    shard_batch_size = max(1, int(getattr(args, "shard_batch_size", 1)))
+    for run_id in range(benchmark_runs):
+        for batch_start in range(0, len(shard_entries), shard_batch_size):
+            batch = shard_entries[batch_start : batch_start + shard_batch_size]
+            batch_jobs = []
+            replay_paths = set()
+            for shard in batch:
+                shard_id = int(shard["shard"])
+                base_path = shard_root / "events" / f"shard_{shard_id:04d}.jsonl"
+                cp_path = shard_root / "counterparties" / f"shard_{shard_id:04d}.jsonl"
+                if not base_path.exists():
+                    continue
+                for loss_rate in loss_rates:
+                    for delay in delays:
+                        replay_path = tmp_root / f"run_{run_id}" / f"loss_{format_loss_label(loss_rate)}" / f"shard_{shard_id:04d}_delay_{delay}.jsonl"
+                        needs_replay = False
+                        for method in methods:
+                            out_dir = (
+                                results_dir
+                                / "full_label_tau_sweep_method_runs"
+                                / f"run_{run_id}"
+                                / f"loss_{format_loss_label(loss_rate)}"
+                                / f"delay_{delay}"
+                                / f"shard_{shard_id:04d}"
+                                / method
+                            )
+                            if not (out_dir / f"tau_sweep_{method}.json").exists():
+                                needs_replay = True
+                            batch_jobs.append({
+                                "context": {
+                                    "run_id": run_id,
+                                    "loss_rate": float(loss_rate),
+                                    "delay_profile_sec": int(delay),
+                                    "shard": shard_id,
+                                    "method": method,
+                                },
+                                "cp_path": cp_path,
+                                "out_dir": out_dir,
+                                "replay_path": replay_path,
+                                "method": method,
+                            })
+                        if needs_replay:
+                            materialize_full_label_replay(base_path, replay_path, delay, float(loss_rate), run_id, int(args.seed))
+                            replay_paths.add(replay_path)
+
+            futures = {}
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, int(args.jobs))) as executor:
+                for job in batch_jobs:
+                    fut = executor.submit(
+                        run_detector_tau_sweep,
+                        args.detector_cli,
+                        cfg_path,
+                        job["cp_path"],
+                        job["replay_path"],
+                        job["method"],
+                        job["out_dir"],
+                        token_cache_path,
+                        tau_grid,
+                    )
+                    futures[fut] = job["context"]
+                for fut in concurrent.futures.as_completed(futures):
+                    context = futures[fut]
+                    payload = fut.result()
+                    add_tau_sweep_rows(aggregates, payload.get("metrics", []), float(context["loss_rate"]))
+                    completed_jobs += 1
+                    shard_best = sorted(payload.get("metrics", []), key=lambda r: (float(r["f1"]), float(r["precision"]), -float(r["tau"])), reverse=True)[0]
+                    print(
+                        f"  [{completed_jobs}/{total_jobs}] shard={int(context['shard']):04d} run={run_id} "
+                        f"loss={float(context['loss_rate']):.2f} delay={context['delay_profile_sec']} method={context['method']} "
+                        f"best_tau={float(shard_best['tau']):.3f} f1={float(shard_best['f1']):.4f}",
+                        flush=True,
+                    )
+            by_method = finalize_tau_sweep_aggregates(aggregates)
+            best_rows = best_tau_rows(by_method)
+            write_csv(results_dir / "full_label_tau_sweep_by_method.csv", by_method)
+            write_csv(results_dir / "full_label_tau_sweep_best.csv", best_rows)
+            write_tau_sweep_report(results_dir / "full_label_tau_sweep_report.md", best_rows)
+            for replay_path in replay_paths:
+                try:
+                    replay_path.unlink()
+                except FileNotFoundError:
+                    pass
+
+    by_method = finalize_tau_sweep_aggregates(aggregates)
+    best_rows = best_tau_rows(by_method)
+    write_csv(results_dir / "full_label_tau_sweep_by_method.csv", by_method)
+    write_csv(results_dir / "full_label_tau_sweep_best.csv", best_rows)
+    write_tau_sweep_report(results_dir / "full_label_tau_sweep_report.md", best_rows)
+    print("[tau-sweep] done")
+    print(f"- results: {results_dir}")
+    return 0
+
+
 def run_full_label_pipeline(args: argparse.Namespace, cfg: dict) -> int:
     results_dir = Path(args.results_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
     dataset_cache_path = Path(args.dataset_cache) if args.dataset_cache else Path("data/normalized/address_poisoning_ethereum.normalized.full.parquet")
     if not dataset_cache_path.exists():
         raise FileNotFoundError(f"full normalized parquet not found: {dataset_cache_path}")
+    day_boundaries_path = Path(args.day_boundaries) if str(getattr(args, "day_boundaries", "") or "").strip() else None
 
     token_cache_path = Path(args.token_cache) if args.token_cache else Path("data/normalized/full_dataset_token_metadata_cache.json")
     token_metadata = load_token_cache(token_cache_path)
@@ -1984,16 +2264,25 @@ def run_full_label_pipeline(args: argparse.Namespace, cfg: dict) -> int:
     benchmark_runs = args.benchmark_runs if args.benchmark_runs and args.benchmark_runs > 0 else 1
     methods = [m.strip() for m in (args.methods or "confirmed_chain,linear_scan,address_only_trie,mempool_trieguard,prefix_only,suffix_only,no_token,no_time,no_value").split(",") if m.strip()]
 
-    print("[full-label] sharding normalized dataset")
-    manifest = write_full_label_shards_fast(dataset_cache_path, results_dir, int(args.shard_count), int(args.max_rows), token_metadata)
+    source_results_dir = Path(args.full_label_source_results_dir) if args.full_label_source_results_dir else Path("")
+    source_manifest = source_results_dir / "full_label_manifest.json" if source_results_dir else Path("")
+    source_shards = source_results_dir / "full_label_shards" if source_results_dir else Path("")
+    if source_manifest.exists() and source_shards.exists():
+        print(f"[full-label] reusing full-label shards from {source_results_dir}")
+        manifest = json.loads(source_manifest.read_text(encoding="utf-8"))
+        shard_root = source_shards
+    else:
+        print("[full-label] sharding normalized dataset")
+        manifest = write_full_label_shards_fast(dataset_cache_path, results_dir, int(args.shard_count), int(args.max_rows), token_metadata)
+        shard_root = results_dir / "full_label_shards"
     print(
         f"[full-label] manifest rows={int(manifest.get('total_rows', 0)):,} "
         f"positives={int(manifest.get('positives', 0)):,} negatives={int(manifest.get('negatives', 0)):,}"
     )
 
-    shard_root = results_dir / "full_label_shards"
     tmp_root = results_dir / "full_label_tmp"
     metric_rows: List[dict] = []
+    daily_metric_rows: List[dict] = []
     total_jobs = 0
     completed_jobs = 0
     shard_entries = [s for s in manifest.get("shards", []) if int(s.get("events", 0)) > 0]
@@ -2066,12 +2355,17 @@ def run_full_label_pipeline(args: argparse.Namespace, cfg: dict) -> int:
                         job["out_dir"],
                         token_cache_path,
                         True,
+                        day_boundaries_path,
                     )
                     futures[fut] = job["context"]
                 for fut in concurrent.futures.as_completed(futures):
                     context = futures[fut]
                     payload = fut.result()
                     metric_rows.append(metric_row_from_payload(payload, context))
+                    for row in payload.get("daily_metrics", []):
+                        daily_row = dict(row)
+                        daily_row.update(context)
+                        daily_metric_rows.append(daily_row)
                     completed_jobs += 1
                     m = payload["metrics"]
                     print(
@@ -2087,6 +2381,10 @@ def run_full_label_pipeline(args: argparse.Namespace, cfg: dict) -> int:
                     pass
 
     write_csv(results_dir / "full_label_shard_metrics.csv", metric_rows)
+    if daily_metric_rows:
+        write_csv(results_dir / "full_label_daily_metrics_by_shard.csv", daily_metric_rows)
+        daily_by_day = aggregate_full_by(daily_metric_rows, ["method", "tau", "loss_rate", "delay_profile_sec", "day"])
+        write_csv(results_dir / "full_label_daily_metrics_by_day.csv", daily_by_day)
     loss0 = [r for r in metric_rows if float(r.get("loss_rate", 0)) == 0.0 and float(r.get("tau", 0)) == tau]
     by_method = aggregate_full_by(loss0, ["method", "tau"])
     write_csv(results_dir / "full_label_confusion_matrix_by_method.csv", by_method)
@@ -2132,6 +2430,8 @@ def main() -> int:
     parser.add_argument("--tau-grid", default="")
     parser.add_argument("--dataset-cache", "--dataset-parquet", dest="dataset_cache", default="")
     parser.add_argument("--full-label-replay", action="store_true")
+    parser.add_argument("--full-label-tau-sweep", action="store_true")
+    parser.add_argument("--full-label-source-results-dir", default="")
     parser.add_argument("--shard-count", type=int, default=256)
     parser.add_argument("--shard-batch-size", type=int, default=1)
     parser.add_argument("--refresh-dataset-cache", action="store_true")
@@ -2141,6 +2441,7 @@ def main() -> int:
     parser.add_argument("--token-cache", default="")
     parser.add_argument("--paper-source", default="")
     parser.add_argument("--paper-output", default="")
+    parser.add_argument("--day-boundaries", default="")
     parser.add_argument("--history-cache", default="")
     parser.add_argument("--counterparties-cache", default="")
     parser.add_argument("--refresh-rpc-cache", action="store_true")
@@ -2153,6 +2454,8 @@ def main() -> int:
     args = parser.parse_args()
 
     cfg = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
+    if args.full_label_tau_sweep:
+        return run_full_label_tau_sweep(args, cfg)
     if args.full_label_replay:
         return run_full_label_pipeline(args, cfg)
 

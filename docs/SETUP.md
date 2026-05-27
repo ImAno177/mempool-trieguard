@@ -10,6 +10,8 @@
 - [Build And Verify](#build-and-verify)
 - [Run Web UI Locally](#run-web-ui-locally)
 - [Run Benchmark](#run-benchmark)
+- [Run Tau Sweep](#run-tau-sweep)
+- [Local Result Artifacts](#local-result-artifacts)
 - [Docker And VPS](#docker-and-vps)
 - [Common Problems](#common-problems)
 
@@ -155,6 +157,40 @@ python -u python/benchmark_pipeline.py `
   --jobs 12
 ```
 
+## Run Tau Sweep
+
+Use this after a full-label run when you want to analyze threshold sensitivity. This is exploratory; keep RQ comparisons at the fixed production threshold `tau=0.40`.
+
+```powershell
+python -u python/benchmark_pipeline.py `
+  --full-label-tau-sweep `
+  --dataset-cache data/normalized/address_poisoning_ethereum.normalized.full.parquet `
+  --full-label-source-results-dir results/full_label_full_dataset_YYYYMMDD_tau040 `
+  --results-dir results/full_label_tau_sweep_YYYYMMDD `
+  --detector-cli .\detector-cli.exe `
+  --token-cache results/rpc_cache/full_dataset_token_metadata_cache.json `
+  --no-rpc-enrich `
+  --loss-rates 0 `
+  --benchmark-runs 1 `
+  --jobs 12
+```
+
+Main outputs:
+
+- `full_label_tau_sweep_report.md`
+- `full_label_tau_sweep_best.csv`
+- `full_label_tau_sweep_by_method.csv`
+
+## Local Result Artifacts
+
+Current local result directories:
+
+- `results/full_label_full_dataset_20260514_tau040` - fixed-threshold full-label replay at `tau=0.40`.
+- `results/full_label_tau_sweep_20260523` - exploratory threshold sweep at loss rate `0`.
+- `results/missing_experiments_20260523` - strict per-wallet RQ2 lookup scaling plus operational overhead.
+
+The RQ2 scaling artifact uses shard `0036`, victim `0x79672062c5a45e3808d6b784129cf3ecf59d4224`, `10,000` sampled replay events, and `30` runs per method/size. The summary files are `rq2_per_wallet_scaling_summary.csv`, `operational_overhead_summary.csv`, and `missing_experiments_report.md`.
+
 ## Docker And VPS
 
 Build image:
@@ -183,5 +219,6 @@ On VPS, copy only code plus local runtime directories you intentionally need. Ke
 - `missing DRPC_HTTP_URL`: set `.env` or PowerShell environment variables.
 - SQL parsing is slow: convert SQL to Parquet once and reuse `--dataset-cache`.
 - Full-label run is slow: increase `--jobs` and use `--shard-batch-size 4`, but watch RAM.
+- Tau sweep is slow: pass `--full-label-source-results-dir` from a completed full-label run to reuse shards.
 - Docker cannot see dataset: mount local `29212703/`, `data/`, and `results/` as in `docker-compose.yml`.
 - LaTeX/PDF generation is not part of the public code repo; benchmark CSV/MD artifacts are generated under ignored `results/`.

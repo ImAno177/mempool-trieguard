@@ -8,6 +8,8 @@
 - [Convert SQL To Parquet](#convert-sql-to-parquet)
 - [Reuse RPC Caches](#reuse-rpc-caches)
 - [Full-Label Benchmark Input](#full-label-benchmark-input)
+- [Full-Label Tau Sweep Input](#full-label-tau-sweep-input)
+- [Local Benchmark Outputs](#local-benchmark-outputs)
 
 ## Related Docs
 
@@ -45,6 +47,9 @@ data/
 results/
   rpc_cache/
     full_dataset_token_metadata_cache.json
+  full_label_full_dataset_20260514_tau040/
+  full_label_tau_sweep_20260523/
+  missing_experiments_20260523/
 ```
 
 Only code and docs are pushed to GitHub.
@@ -99,3 +104,41 @@ python -u python/benchmark_pipeline.py `
   --benchmark-runs 1 `
   --jobs 12
 ```
+
+Current expected manifest for this full-label run:
+
+- Total rows: `34,905,969`
+- Positives: `17,365,954`
+- Negatives: `17,516,047`
+- Replay event rows: `34,882,001`
+- Shards: `256`
+
+## Full-Label Tau Sweep Input
+
+The tau sweep reuses the same local Parquet file and can reuse shards from a completed fixed-threshold run:
+
+```powershell
+python -u python/benchmark_pipeline.py `
+  --full-label-tau-sweep `
+  --dataset-cache data/normalized/address_poisoning_ethereum.normalized.full.parquet `
+  --full-label-source-results-dir results/full_label_full_dataset_YYYYMMDD_tau040 `
+  --results-dir results/full_label_tau_sweep_YYYYMMDD `
+  --detector-cli .\detector-cli.exe `
+  --token-cache results/rpc_cache/full_dataset_token_metadata_cache.json `
+  --no-rpc-enrich `
+  --loss-rates 0 `
+  --benchmark-runs 1 `
+  --jobs 12
+```
+
+If `--full-label-source-results-dir` contains `full_label_manifest.json` and `full_label_shards/`, the sweep reuses those shards. Otherwise it shards the Parquet file again under the new results directory. The default sweep grid is `0.000` to `1.000` in increments of `0.005`.
+
+## Local Benchmark Outputs
+
+The current local benchmark outputs are intentionally kept under ignored `results/` directories:
+
+- `results/full_label_full_dataset_20260514_tau040` - full-label replay and fixed-threshold RQ1-RQ4 tables.
+- `results/full_label_tau_sweep_20260523` - exploratory calibration sweep.
+- `results/missing_experiments_20260523` - per-wallet RQ2 scaling and operational-overhead tables.
+
+Do not commit these outputs. Use them as local evidence for reports and regenerate them when changing detector behavior.

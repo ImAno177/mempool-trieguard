@@ -14,6 +14,7 @@
 - [9. Bang ket qua can bao cao](#9-bang-ket-qua-can-bao-cao)
 - [10. Loi thuong gap](#10-loi-thuong-gap)
 - [11. Tien do de hoan thien bai bao](#11-tien-do-de-hoan-thien-bai-bao)
+- [12. Ket qua hien tai](#12-ket-qua-hien-tai)
 
 ## Tai lieu lien quan
 
@@ -34,6 +35,8 @@ Huong dan nay mo ta cach hien thuc va danh gia Mempool-TrieGuard, mot he thong c
 | RQ2 | Trie co giam latency so voi quet tuyen tinh khong? | Benchmark lookup voi 10, 100, 1.000, 10.000 counterparty tren moi vi. |
 | RQ3 | Thanh phan nao cua risk score dong gop nhieu nhat? | Ablation: bo token context, bo time decay, bo value score, chi dung address similarity. |
 | RQ4 | He thong ben vung the nao khi mempool khong day du? | Mo phong ty le mat giao dich pending 10%, 25%, 50% va do recall. |
+
+Quy tac so sanh hien tai: cac bang RQ dung cung production threshold `tau=0.40`. Tau sweep chi la phan phan tich calibration rieng, khong dung de tune threshold theo tung method trong bang RQ.
 
 ## 3. Moi truong
 
@@ -114,14 +117,64 @@ Voi moi vi duoc bao ve:
 
 ## 9. Bang ket qua can bao cao
 
-Sau khi chay xong, thay cac gia tri `TBD` trong bao cao hoac file thuyet minh bang ket qua that:
+Bang RQ1 hien tai tren full-label replay voi `tau=0.40`, tong hop qua delay profile `5/15/30` giay:
 
 | Method | Precision | Recall | F1 | Alert latency |
 |---|---|---|---|---|
-| Confirmed-chain detector | ket qua | ket qua | ket qua | post-confirmation |
-| Linear mempool scan | ket qua | ket qua | ket qua | ket qua |
-| Address-only trie | ket qua | ket qua | ket qua | ket qua |
-| Mempool-TrieGuard | ket qua | ket qua | ket qua | ket qua |
+| Confirmed-chain detector | 0.9999996 | 0.2837245 | 0.4420332 | post-confirmation |
+| Linear mempool scan | 0.9786710 | 0.9654436 | 0.9720123 | pre-confirmation replay |
+| Address-only trie | 0.9998110 | 0.9572912 | 0.9780892 | pre-confirmation replay |
+| Mempool-TrieGuard | 0.9992142 | 0.9572795 | 0.9777975 | pre-confirmation replay |
+
+Bang RQ2 hien tai:
+
+| Method | Lookup mean ms | P95 ms | P99 ms | Throughput TPS | Avg candidates |
+|---|---:|---:|---:|---:|---:|
+| Linear scan | 0.095244 | 0.543809 | 1.431798 | 25,738.66 | 97.32 |
+| Mempool-TrieGuard | 0.004659 | 0.000000 | 0.014142 | 146,635.27 | 2.80 |
+
+Bang RQ2 scaling per-wallet bo sung, chay 30 lan tren shard `0036`, victim `0x79672062c5a45e3808d6b784129cf3ecf59d4224`, replay mau `10,000` event:
+
+| Method | Counterparties | Lookup mean ms | Std | Throughput TPS |
+|---|---:|---:|---:|---:|
+| Mempool-TrieGuard | 10 | 0.000306 | 0.000124 | 1,470,579.88 |
+| Linear scan | 10 | 0.000553 | 0.000145 | 1,015,607.87 |
+| Mempool-TrieGuard | 100 | 0.000382 | 0.000153 | 1,330,953.84 |
+| Linear scan | 100 | 0.002698 | 0.000211 | 316,276.11 |
+| Mempool-TrieGuard | 1,000 | 0.000543 | 0.000159 | 1,115,330.47 |
+| Linear scan | 1,000 | 0.021775 | 0.000377 | 44,908.07 |
+| Mempool-TrieGuard | 10,000 | 0.000668 | 0.000175 | 903,593.11 |
+| Linear scan | 10,000 | 0.211963 | 0.001097 | 4,696.11 |
+
+Bang overhead bo sung:
+
+| Counterparties | Load/update mean ms | Heap per wallet KB | Heap per 1k counterparties KB |
+|---:|---:|---:|---:|
+| 10 | 0.021030 | 14.53 | 1,453.44 |
+| 100 | 0.055673 | 32.26 | 322.64 |
+| 1,000 | 0.622817 | 163.73 | 163.73 |
+| 10,000 | 6.491340 | 1,608.84 | 160.88 |
+
+Bang RQ3 hien tai:
+
+| Method | Precision | Recall | F1 |
+|---|---:|---:|---:|
+| Address-only trie | 0.999811 | 0.957291 | 0.978089 |
+| Mempool-TrieGuard | 0.999214 | 0.957280 | 0.977797 |
+| No time | 0.999547 | 0.957480 | 0.978062 |
+| No token | 0.998967 | 0.948913 | 0.973297 |
+| No value | 0.999129 | 0.957496 | 0.977869 |
+| Prefix only | 0.999564 | 0.957186 | 0.977916 |
+| Suffix only | 0.999621 | 0.957189 | 0.977945 |
+
+Bang RQ4 hien tai:
+
+| Loss rate | Precision | Recall | F1 |
+|---:|---:|---:|---:|
+| 0.00 | 0.999214 | 0.957280 | 0.977797 |
+| 0.10 | 0.999216 | 0.861548 | 0.925289 |
+| 0.25 | 0.999218 | 0.717912 | 0.835523 |
+| 0.50 | 0.999208 | 0.478467 | 0.647081 |
 
 ## 10. Loi thuong gap
 
@@ -133,17 +186,42 @@ Sau khi chay xong, thay cac gia tri `TBD` trong bao cao hoac file thuyet minh ba
 
 ## 11. Tien do de hoan thien bai bao
 
-| Cong viec | Thoi luong du kien |
+| Cong viec | Trang thai |
 |---|---|
-| Tai va chuan hoa dataset | 2 ngay |
-| Hien thuc parser va trie | 3 ngay |
-| Hien thuc risk score va alert | 2 ngay |
-| Chay benchmark latency | 1 ngay |
-| Replay dataset va tinh metric | 3 ngay |
-| Viet bang, hinh, va phan ket qua | 2 ngay |
-| Review va polish ban thao | 2 ngay |
+| Tai va chuan hoa dataset | Xong tren may local |
+| Hien thuc parser va trie | Xong |
+| Hien thuc risk score va alert | Xong, can calibration tiep |
+| Chay full-label benchmark | Xong voi `tau=0.40` |
+| Chay tau sweep | Xong voi loss rate `0` |
+| Chay RQ2 scaling per-wallet va overhead | Xong trong `results/missing_experiments_20260523` |
+| Viet ban thao LaTeX | Da co file local `paper/mempool_trieguard_full_dataset_paper_20260523.tex` |
+| Review va polish ban thao | Con lai |
 
-Tong thoi gian du kien: 15 ngay lam viec.
+## 12. Ket qua hien tai
+
+Full-label dataset:
+
+- Total rows: `34,905,969`.
+- Positives: `17,365,954`.
+- Negatives: `17,516,047`.
+- Shards: `256`.
+- Positives la `zero_value_transfer OR tiny_transfer OR counterfeit_token_transfer`.
+- Negatives la `intended_transfer` hop le, loai poisoning va payoff rows.
+- Pending observations duoc replay bang `observed_at = block_time - delay`.
+
+Exploratory tau sweep:
+
+| Method | Best tau | Best F1 | F1 at tau=0.40 | Delta F1 |
+|---|---:|---:|---:|---:|
+| Address-only trie | 0.505 | 0.978172 | 0.978089 | +0.000083 |
+| Mempool-TrieGuard | 0.395 | 0.977826 | 0.977797 | +0.000029 |
+| No time | 0.430 | 0.978073 | 0.978062 | +0.000011 |
+| No token | 0.335 | 0.976106 | 0.973297 | +0.002809 |
+| No value | 0.430 | 0.977976 | 0.977869 | +0.000107 |
+| Prefix only | 0.390 | 0.977967 | 0.977916 | +0.000050 |
+| Suffix only | 0.390 | 0.978000 | 0.977945 | +0.000054 |
+
+Ket luan can viet dung trong paper: trie retrieval tot va nhanh, `tau=0.40` gan toi uu cho production method, nhung risk score hien tai chua thang moi ablation. Vi vay can trinh bay day la finding ve calibration, khong nen tune threshold rieng cho tung method de lam dep bang RQ.
 
 
 

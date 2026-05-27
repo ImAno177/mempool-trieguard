@@ -12,6 +12,9 @@ Mempool-TrieGuard is a Go detector plus Python benchmark pipeline for pre-confir
 - [Quick Start](#quick-start)
 - [Docker Workflow](#docker-workflow)
 - [Full Dataset Benchmark](#full-dataset-benchmark)
+- [Full Dataset Tau Sweep](#full-dataset-tau-sweep)
+- [RQ2 Scaling And Overhead](#rq2-scaling-and-overhead)
+- [Paper Draft](#paper-draft)
 - [Artifacts And Dataset Policy](#artifacts-and-dataset-policy)
 - [Promote Config Local To VPS](#promote-config-local-to-vps)
 - [Verification](#verification)
@@ -32,6 +35,7 @@ Mempool-TrieGuard is a Go detector plus Python benchmark pipeline for pre-confir
 | `scripts/` | Smoke and local helper scripts. |
 | `docs/` | Public project notes, experiment guide, and handoff document. |
 | `docs/DATASET.md` | How to convert the raw dataset into local Parquet artifacts. |
+| `paper/` | Local-only manuscript drafts and paper notes; ignored by Git in this checkout. |
 
 ## Documentation Links
 
@@ -51,6 +55,8 @@ Mempool-TrieGuard is a Go detector plus Python benchmark pipeline for pre-confir
 - dRPC live mempool mode using `drpc_pendingTransactions` and HTTP fallback enrichment.
 - SSR + HTMX Web UI for local artifacts, live status, provider health, alerts, and config import.
 - Python benchmark pipeline for SQL to Parquet normalization, full-label replay, sharding by victim, loss-rate simulation, metrics, and report table generation.
+- Full-label tau sweep mode for one-pass threshold analysis across production and ablation methods.
+- Local controlled RQ2 scaling and operational-overhead artifacts under `results/missing_experiments_20260523`.
 
 ## Security And Secrets
 
@@ -149,14 +155,71 @@ Main current result from the last full run:
 - `mempool_trieguard`: precision `0.999214`, recall `0.957280`, F1 `0.977797`.
 - `linear_scan`: precision `0.978671`, recall `0.965444`, F1 `0.972012`.
 - `confirmed_chain`: precision `1.000000`, recall `0.283724`, F1 `0.442033`.
+- RQ3 caveat: `address_only_trie` reaches F1 `0.978089`, slightly above the current full risk score. Treat this as a risk-score calibration finding, not as evidence to tune thresholds per method for RQ comparisons.
 
 See [Progress handoff](docs/PROGRESS.md) for interpretation and next improvements.
+
+## Full Dataset Tau Sweep
+
+Use tau sweep only as an exploratory calibration analysis. RQ tables should still use the fixed production threshold `tau=0.40` unless the experiment protocol is explicitly changed.
+
+```powershell
+python -u python/benchmark_pipeline.py `
+  --full-label-tau-sweep `
+  --dataset-cache data/normalized/address_poisoning_ethereum.normalized.full.parquet `
+  --full-label-source-results-dir results/full_label_full_dataset_YYYYMMDD_tau040 `
+  --results-dir results/full_label_tau_sweep_YYYYMMDD `
+  --detector-cli .\detector-cli.exe `
+  --token-cache results/rpc_cache/full_dataset_token_metadata_cache.json `
+  --no-rpc-enrich `
+  --loss-rates 0 `
+  --benchmark-runs 1 `
+  --jobs 12
+```
+
+The current completed sweep used loss rate `0`, all full-label shards, and replay delays `5/15/30` seconds. Key results:
+
+| Method | Best tau | Best F1 | F1 at tau=0.40 | Delta F1 |
+|---|---:|---:|---:|---:|
+| `address_only_trie` | 0.505 | 0.978172 | 0.978089 | +0.000083 |
+| `mempool_trieguard` | 0.395 | 0.977826 | 0.977797 | +0.000029 |
+| `no_time` | 0.430 | 0.978073 | 0.978062 | +0.000011 |
+| `no_token` | 0.335 | 0.976106 | 0.973297 | +0.002809 |
+| `no_value` | 0.430 | 0.977976 | 0.977869 | +0.000107 |
+| `prefix_only` | 0.390 | 0.977967 | 0.977916 | +0.000050 |
+| `suffix_only` | 0.390 | 0.978000 | 0.977945 | +0.000054 |
+
+Interpretation: `tau=0.40` is nearly optimal for `mempool_trieguard`, but the current contextual risk score still does not dominate every ablation.
+
+## RQ2 Scaling And Overhead
+
+The strict per-wallet RQ2 scaling and operational-overhead experiment has been completed locally under `results/missing_experiments_20260523`. This directory is ignored by Git.
+
+Scope: shard `0036`, victim `0x79672062c5a45e3808d6b784129cf3ecf59d4224`, `63,607` available trusted counterparties, `10,000` replay events, delay `15` seconds, loss rate `0`, and `30` runs per method/size.
+
+| Method | Counterparties | Lookup mean ms | Std | Throughput TPS |
+|---|---:|---:|---:|---:|
+| `mempool_trieguard` | 10 | 0.000306 | 0.000124 | 1,470,579.88 |
+| `linear_scan` | 10 | 0.000553 | 0.000145 | 1,015,607.87 |
+| `mempool_trieguard` | 100 | 0.000382 | 0.000153 | 1,330,953.84 |
+| `linear_scan` | 100 | 0.002698 | 0.000211 | 316,276.11 |
+| `mempool_trieguard` | 1,000 | 0.000543 | 0.000159 | 1,115,330.47 |
+| `linear_scan` | 1,000 | 0.021775 | 0.000377 | 44,908.07 |
+| `mempool_trieguard` | 10,000 | 0.000668 | 0.000175 | 903,593.11 |
+| `linear_scan` | 10,000 | 0.211963 | 0.001097 | 4,696.11 |
+
+Operational overhead at `10,000` counterparties is `6.491340` ms mean load/update time, `1,608.84` KB heap per wallet, and `160.88` KB heap per 1,000 counterparties.
+
+## Paper Draft
+
+A new local LaTeX draft was written at `paper/mempool_trieguard_full_dataset_paper_20260523.tex`. It reports the full-label run, the tau sweep, and the ablation caveat above. The newer per-wallet RQ2 scaling and overhead artifacts are ready under `results/missing_experiments_20260523` for the next manuscript revision. The `paper/` directory is ignored by Git in this checkout, so manuscript files are local artifacts unless the repository policy changes.
 
 ## Artifacts And Dataset Policy
 
 Ignored by Git:
 
 - `results/` benchmark outputs.
+- `paper/` local manuscript drafts in this checkout.
 - `29212703/` extracted dataset and `29212703.zip`.
 - `data/` entirely; recreate local Parquet artifacts from the raw SQL dump when needed.
 - Local binaries such as `detector-cli.exe` and `server.exe`.

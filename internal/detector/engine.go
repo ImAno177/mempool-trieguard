@@ -106,6 +106,10 @@ func (e *Engine) Detect(p PendingTx) ([]Alert, []PerfRecord) {
 	return e.detectByTrieMode(p, candidateUnion, true)
 }
 
+func (e *Engine) MaxScore(p PendingTx) (ScoreResult, []PerfRecord) {
+	return e.maxScoreByTrieMode(p, candidateUnion, true)
+}
+
 // DetectLegacy uses the previous deepest-node prefix/suffix retrieval policy.
 func (e *Engine) DetectLegacy(p PendingTx) ([]Alert, []PerfRecord) {
 	return e.detectByTrieMode(p, candidateUnion, false)
@@ -123,14 +127,26 @@ func (e *Engine) DetectIntersection(p PendingTx) ([]Alert, []PerfRecord) {
 	return e.detectByTrieMode(p, candidateIntersection, true)
 }
 
+func (e *Engine) MaxScoreIntersection(p PendingTx) (ScoreResult, []PerfRecord) {
+	return e.maxScoreByTrieMode(p, candidateIntersection, true)
+}
+
 // DetectPrefixOnly uses only prefix-trie retrieval for ablation experiments.
 func (e *Engine) DetectPrefixOnly(p PendingTx) ([]Alert, []PerfRecord) {
 	return e.detectByTrieMode(p, candidatePrefixOnly, true)
 }
 
+func (e *Engine) MaxScorePrefixOnly(p PendingTx) (ScoreResult, []PerfRecord) {
+	return e.maxScoreByTrieMode(p, candidatePrefixOnly, true)
+}
+
 // DetectSuffixOnly uses only suffix-trie retrieval for ablation experiments.
 func (e *Engine) DetectSuffixOnly(p PendingTx) ([]Alert, []PerfRecord) {
 	return e.detectByTrieMode(p, candidateSuffixOnly, true)
+}
+
+func (e *Engine) MaxScoreSuffixOnly(p PendingTx) (ScoreResult, []PerfRecord) {
+	return e.maxScoreByTrieMode(p, candidateSuffixOnly, true)
 }
 
 func (e *Engine) detectByTrieMode(p PendingTx, mode trieCandidateMode, cumulative bool) ([]Alert, []PerfRecord) {
@@ -196,6 +212,82 @@ func (e *Engine) detectByTrieMode(p PendingTx, mode trieCandidateMode, cumulativ
 		})
 	}
 	return alerts, perf
+}
+
+func (e *Engine) maxScoreByTrieMode(p PendingTx, mode trieCandidateMode, cumulative bool) (ScoreResult, []PerfRecord) {
+	started := time.Now()
+	best := ScoreResult{
+		TxHash:     p.Hash,
+		ObservedAt: p.ObservedAt,
+	}
+	perf := make([]PerfRecord, 0)
+
+	from, err1 := NormalizeAddress(p.From)
+	to, err2 := NormalizeAddress(p.To)
+	if err1 != nil || err2 != nil {
+		return best, perf
+	}
+
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	candidates := [][2]string{}
+	if _, ok := e.victims[from]; ok {
+		candidates = append(candidates, [2]string{from, to})
+	}
+	if _, ok := e.victims[to]; ok {
+		candidates = append(candidates, [2]string{to, from})
+	}
+
+	bestLastSeen := time.Time{}
+	totalScored := 0
+	for _, c := range candidates {
+		victim := c[0]
+		lookalike := c[1]
+		idx := e.indices[victim]
+		if idx == nil {
+			continue
+		}
+		candidateIDs := e.candidateIDs(idx, p, lookalike, mode, cumulative)
+
+		scored := 0
+		for r := range candidateIDs {
+			if r == lookalike {
+				continue
+			}
+			histories := idx.Recipients[r]
+			ap := prefixMatchNibbles(lookalike, r)
+			as := suffixMatchNibbles(lookalike, r)
+			cp, score, ok, activeScored := e.bestScoringCounterparty(p, histories, lookalike, ap, as)
+			scored += activeScored
+			if !ok {
+				continue
+			}
+			if !best.Found || score.Total > best.Score.Total || (score.Total == best.Score.Total && cp.LastSeen.After(bestLastSeen)) {
+				best = ScoreResult{
+					TxHash:           p.Hash,
+					Victim:           victim,
+					Lookalike:        lookalike,
+					MatchedRecipient: r,
+					ObservedAt:       p.ObservedAt,
+					MatchedPrefix:    ap,
+					MatchedSuffix:    as,
+					Score:            score,
+					Found:            true,
+				}
+				bestLastSeen = cp.LastSeen
+			}
+		}
+		perf = append(perf, PerfRecord{
+			TxHash:           p.Hash,
+			Victim:           victim,
+			LookupLatencyMs:  time.Since(started).Seconds() * 1000,
+			CandidatesScored: scored,
+		})
+		totalScored += scored
+	}
+	best.CandidatesScored = totalScored
+	return best, perf
 }
 
 func (e *Engine) candidateIDs(idx *victimIndex, p PendingTx, lookalike string, mode trieCandidateMode, cumulative bool) map[string]struct{} {

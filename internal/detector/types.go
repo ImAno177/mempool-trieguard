@@ -71,6 +71,21 @@ type Alert struct {
 	SubscriptionTrace string         `json:"subscription_trace,omitempty"`
 }
 
+// ScoreResult is the best risk score observed for one pending transaction
+// before applying the alert threshold.
+type ScoreResult struct {
+	TxHash           string         `json:"tx_hash"`
+	Victim           string         `json:"victim,omitempty"`
+	Lookalike        string         `json:"lookalike,omitempty"`
+	MatchedRecipient string         `json:"matched_recipient,omitempty"`
+	ObservedAt       time.Time      `json:"observed_at"`
+	MatchedPrefix    int            `json:"matched_prefix,omitempty"`
+	MatchedSuffix    int            `json:"matched_suffix,omitempty"`
+	Score            ScoreBreakdown `json:"score"`
+	CandidatesScored int            `json:"candidates_scored"`
+	Found            bool           `json:"found"`
+}
+
 // PerfRecord is emitted for benchmark paths.
 type PerfRecord struct {
 	TxHash           string  `json:"tx_hash"`
