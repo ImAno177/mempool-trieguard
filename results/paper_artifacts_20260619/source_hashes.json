@@ -1,0 +1,30 @@
+{
+    "artifact":  "paper_artifact_hashes",
+    "generated_at_utc":  "2026-06-19T11:52:10Z",
+    "files":  [
+                  {
+                      "path":  "live_mempool_20260619T0316_1000v\\live_mempool_alerts.jsonl",
+                      "sha256":  "5ae3419cfa8d5e0d88225977e10bd9465ca0c832273cbbed57b466b12c67cdc4"
+                  },
+                  {
+                      "path":  "live_mempool_20260619T0316_1000v\\live_mempool_metrics.json",
+                      "sha256":  "09836390eadaa372dc8cec0ec08c4c46132c5493fed0e7d9127559a11f656ede"
+                  },
+                  {
+                      "path":  "live_mempool_20260619T0316_1000v\\run_manifest.json",
+                      "sha256":  "6d0c5679d49f255d03c9000ec0c3be69360b60e7228a604abba8395379c81ae2"
+                  },
+                  {
+                      "path":  "paper_results_summary.json",
+                      "sha256":  "33f06f122182c8644033e79cccfd1801fce93ac013c708875207391a8056672e"
+                  },
+                  {
+                      "path":  "protected_accounts\\live_active_protected_accounts_24h_1000victims.json.manifest.json",
+                      "sha256":  "869a68f6877617dbfb013c5b091c1c274e8e02617c420b1930878f645f1be3d3"
+                  },
+                  {
+                      "path":  "rq3_lr_feature_ablation\\summary_aggregate.json",
+                      "sha256":  "57a9491d7177bf6e78f487f2d69a729b83f91a47664f646d03fea25b75cb04f5"
+                  }
+              ]
+}

@@ -2434,7 +2434,7 @@ def run_full_label_pipeline(args: argparse.Namespace, cfg: dict) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run paper-grade local benchmark pipeline.")
-    parser.add_argument("--dataset-root", default="29212703")
+    parser.add_argument("--dataset-root", default="dataset")
     parser.add_argument("--config", default="configs/app.yaml")
     parser.add_argument("--results-dir", default="results")
     parser.add_argument("--run-mode", choices=["smoke", "full"], default="smoke")

@@ -1,5 +1,5 @@
 param(
-  [string]$DatasetRoot = "D:\blockchain\da\29212703",
+  [string]$DatasetRoot = "dataset",
   [string]$Config = "configs\app.yaml",
   [string]$ResultsDir = "results"
 )

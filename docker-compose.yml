@@ -45,7 +45,7 @@ services:
       - --detector-cli
       - detector-cli
     volumes:
-      - ./29212703:/dataset:ro
+      - ./dataset:/dataset:ro
       - ./configs:/app/configs
       - ./data:/app/data
       - ./results:/app/results

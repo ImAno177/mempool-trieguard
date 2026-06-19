@@ -93,7 +93,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDatasets(w http.ResponseWriter, r *http.Request) {
 	entries := []datasetEntry{}
-	root := filepath.Join(".", "29212703")
+	root := filepath.Join(".", "dataset")
 	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info == nil || info.IsDir() {
 			return nil

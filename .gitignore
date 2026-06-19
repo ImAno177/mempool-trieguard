@@ -4,9 +4,11 @@
 
 # Large local datasets and generated artifacts
 data/
-results/
-29212703/
-29212703.zip
+results/*
+!results/paper_artifacts_20260619/
+!results/paper_artifacts_20260619/**
+dataset/
+dataset.zip
 
 # Build outputs
 bin/

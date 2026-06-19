@@ -1,39 +1,44 @@
-﻿# Agent Guide
+# AGENTS.md
 
-## Table of Contents
+## Project Overview
 
-- [Purpose](#purpose)
-- [Documentation Links](#documentation-links)
-- [Repository Rules](#repository-rules)
-- [Verification](#verification)
-- [Current Benchmark Position](#current-benchmark-position)
+Mempool-TrieGuard is a research prototype for pre-confirmation Ethereum address-poisoning detection. The main runtime is Go; the dataset and replay benchmark pipeline are Python. The detector builds time-aware prefix/suffix tries over trusted counterparties, screens pending ERC-20 transfer views, and scores lookalike candidates with a validation-calibrated lightweight LR score.
 
-## Purpose
+## Setup Commands
 
-This file gives AI/code agents enough context to work safely in the Mempool-TrieGuard repository.
+```powershell
+go mod download
+python -m py_compile python/benchmark_pipeline.py
+go test ./...
+go build -o detector-cli.exe ./cmd/detector-cli
+go build -o server.exe ./cmd/server
+```
 
-## Documentation Links
+Linux shortcuts:
 
-- [README](README.md) - repo map, benchmark commands, and artifact policy.
-- [Setup guide](docs/SETUP.md) - environment setup and local/VPS runbook.
-- [Experiment guide](docs/EXPERIMENT_GUIDE.md) - RQ1-RQ4, baselines, metrics, and experimental requirements.
-- [Dataset notes](docs/DATASET.md) - local dataset/cache expectations.
-- [Progress handoff](docs/PROGRESS.md) - short current status and next improvements.
-- [Detector agent notes](internal/AGENTS.md) - Go detector and scoring invariants.
-- [Python agent notes](python/AGENTS.md) - benchmark pipeline and full-label replay rules.
+```bash
+make verify
+make build-linux
+```
 
-## Repository Rules
+Run the local server:
 
-- Do not commit `.env`, API keys, dRPC URLs with real keys, `results/`, local datasets, Parquet files, generated caches, or binaries.
-- Keep replay thresholds fixed by the documented protocol: legacy additive baselines use their preselected thresholds, while the current learned LR `mempool_trieguard` row uses validation-selected `tau=0.901`.
-- For RQ comparisons, do not tune thresholds on the test set; any per-ablation threshold must be selected on validation and explicitly documented.
-- Treat full-label tau sweep results as exploratory calibration analysis, not as replacements for fixed-threshold RQ tables.
-- Prefer Go for detector/runtime behavior and Python for dataset processing/statistics.
-- Preserve time-aware counterparty logic: trusted counterparties must be valid only if `last_seen <= observed_at` and inside the configured window.
+```powershell
+go run ./cmd/server --config configs\app.yaml
+```
 
-## Verification
+## Code Style
 
-Run before publishing changes:
+- Prefer Go for detector, live runtime, RPC, and server behavior.
+- Prefer Python for dataset normalization, replay orchestration, statistics, and table generation.
+- Keep CLI flags backward compatible; `python/benchmark_pipeline.py` calls `cmd/detector-cli` directly.
+- Do not hardcode RPC endpoints, API keys, Telegram tokens, or passwords.
+- Preserve output schemas for benchmark summaries unless the paper protocol is explicitly updated.
+- Keep comments short and useful; avoid restating the code.
+
+## Testing Instructions
+
+Run these before publishing or pushing behavior changes:
 
 ```powershell
 python -m py_compile python/benchmark_pipeline.py
@@ -42,18 +47,60 @@ go build -o detector-cli.exe ./cmd/detector-cli
 go build -o server.exe ./cmd/server
 ```
 
-## Current Benchmark Position
+For paper-only LaTeX edits, also run from `paper/` when the manuscript is present locally:
 
-The current full-label run used all labels in `data/normalized/address_poisoning_ethereum.normalized.full.parquet` locally. Results are not committed because `results/` is ignored.
+```powershell
+pdflatex -interaction=nonstopmode -halt-on-error paper.tex
+```
 
-- Dataset scope: `34,905,969` total rows, `17,365,954` positives, `17,516,047` negatives, `256` shards.
-- Current manuscript detector result uses learned LR score at validation-selected `tau=0.901`: `mempool_trieguard` precision `0.999923`, recall `0.957455`, F1 `0.978229`.
-- Current manuscript RQ2 lookup uses the MTG-only LR replay: `mempool_trieguard` mean `0.003891` ms, p95 `0.000000` ms, p99 `0.000000` ms vs legacy `linear_scan` mean `0.143894` ms, p95 `1.070443` ms, p99 `2.258818` ms.
-- Additional per-wallet RQ2 scaling and overhead artifacts are local at `results/missing_experiments_20260523`: at `10,000` counterparties, `mempool_trieguard` lookup mean `0.000668` ms vs `linear_scan` `0.211963` ms; load/update mean `6.491340` ms; heap `160.88` KB per 1,000 counterparties.
-- RQ3 calibrated LR feature ablation over 30 runs: full address+type+token F1 mean `0.979535`, ahead of address-only `0.979512`, no-type `0.979511`, no-token `0.979513`, suffix-only `0.979511`, and prefix-only `0.978909`. The margin is small and should be reported conservatively.
-- Legacy additive tau sweep result: `mempool_trieguard` best tau is `0.395` with F1 `0.977826`, only `+0.000029` over tau `0.40`; this is diagnostic, not the current main scoring formula.
-- Manuscript files are local-only and excluded from this code repository; current local draft is `paper/paper.tex`.
+## Detector Invariants
 
+- Production method name is `mempool_trieguard`.
+- Decision policy is score-first: emit an alert when `score.Total >= tau`.
+- Trie retrieval is candidate generation; do not add hard prefix/suffix gates that drop positives before scoring.
+- Trusted counterparties are time-aware: a record is valid only when `last_seen <= observed_at` and inside the configured history window.
+- Exact trusted-counterparty matches must not become poisoning alerts.
+- Token metadata can be missing; scoring must degrade gracefully.
 
+## Benchmark Rules
 
+- Legacy additive baselines keep their documented fixed thresholds.
+- The current learned LR `mempool_trieguard` row uses validation-selected `tau=0.901`.
+- Do not tune thresholds on the test set.
+- Treat full-label tau sweep results as exploratory calibration diagnostics, not replacements for fixed-protocol RQ tables.
+- RQ3 ablations use the same LR-family training protocol with restricted feature sets and validation-selected thresholds.
+- RQ4 simulated pending-visibility loss applies to `mempool_trieguard`.
+- Live microbenchmark results do not provide live precision or recall because the provider feed has no poisoning ground truth.
+- Live visibility loss is a provider-specific public-feed proxy, computed as `1 - seen_pending_rate` over post-warmup included transactions.
 
+## Current Paper Metrics
+
+- Dataset scope: 34,905,969 rows, 17,365,954 positives, 17,516,047 negatives, 256 shards.
+- Main replay row: precision 0.999923, recall 0.957455, F1 0.978229 at `tau=0.901`.
+- Full-replay lookup: `mempool_trieguard` mean 0.003565 ms vs `linear_scan` 0.143894 ms.
+- Controlled 10,000-counterparty lookup: trie 0.001443 ms, linear scan 0.211963 ms, DB index 0.342162 ms, DB-LSH-style 0.247552 ms.
+- RQ3 calibrated LR feature ablation: full address+type+token F1 mean 0.979535, address-only 0.979512.
+- Live run: 813,092 pending messages over six hours, detector p99 0.016519 ms, lookup p99 0.023420 ms, Telegram Bot API acknowledgment p99 956.208 ms.
+- Live visibility proxy: 43.003% for all included transactions and 24.210% for included direct ERC-20 transfer calls.
+
+## Artifact Policy
+
+Commit only code, config templates, public docs, and the curated paper artifact bundle:
+
+```text
+results/paper_artifacts_20260619/
+```
+
+Do not commit:
+
+- `.env`, `.env.*` except `.env.example`, API keys, dRPC URLs with embedded keys, Telegram bot tokens, or passwords.
+- Raw datasets, `dataset/`, `dataset.zip`, `data/`, Parquet files, local RPC caches, or full generated `results/` trees.
+- Binaries such as `detector-cli.exe`, `server.exe`, shared libraries, or release artifacts.
+- Local manuscript drafts under `paper/` unless the user explicitly changes the repository policy.
+
+## PR And Commit Notes
+
+- Keep changes narrowly tied to the requested experiment, paper, or runtime behavior.
+- State whether replay results, live results, or both are affected.
+- Mention any benchmark artifacts used to update paper numbers.
+- Re-run relevant checks and report failures plainly.
