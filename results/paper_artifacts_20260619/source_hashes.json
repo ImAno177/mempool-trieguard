@@ -1,30 +1,86 @@
 {
     "artifact":  "paper_artifact_hashes",
-    "generated_at_utc":  "2026-06-19T11:52:10Z",
+    "generated_at_utc":  "2026-06-19T12:09:42Z",
     "files":  [
                   {
+                      "path":  "artifact_inventory.csv",
+                      "bytes":  1914,
+                      "sha256":  "8a3847efe2d118e2a57eb33213709fade025faca6f2ef6bc089e83d4db66841a"
+                  },
+                  {
                       "path":  "live_mempool_20260619T0316_1000v\\live_mempool_alerts.jsonl",
+                      "bytes":  145922,
                       "sha256":  "5ae3419cfa8d5e0d88225977e10bd9465ca0c832273cbbed57b466b12c67cdc4"
                   },
                   {
+                      "path":  "live_mempool_20260619T0316_1000v\\live_mempool_blocks.csv",
+                      "bytes":  343628,
+                      "sha256":  "80599a95dc2bae01f341c3729920779d1667d56eb6bc812e1a28e7ecdede3cf0"
+                  },
+                  {
                       "path":  "live_mempool_20260619T0316_1000v\\live_mempool_metrics.json",
+                      "bytes":  5046,
                       "sha256":  "09836390eadaa372dc8cec0ec08c4c46132c5493fed0e7d9127559a11f656ede"
                   },
                   {
                       "path":  "live_mempool_20260619T0316_1000v\\run_manifest.json",
+                      "bytes":  1607,
                       "sha256":  "6d0c5679d49f255d03c9000ec0c3be69360b60e7228a604abba8395379c81ae2"
                   },
                   {
                       "path":  "paper_results_summary.json",
+                      "bytes":  14116,
                       "sha256":  "33f06f122182c8644033e79cccfd1801fce93ac013c708875207391a8056672e"
                   },
                   {
+                      "path":  "protected_accounts\\live_active_protected_accounts_24h_1000victims.json",
+                      "bytes":  19032929,
+                      "sha256":  "2e1cc6a8cd0a4580bef6f6e3728680b2efac7f86c71ade9fa51d490b08128a7f"
+                  },
+                  {
                       "path":  "protected_accounts\\live_active_protected_accounts_24h_1000victims.json.manifest.json",
+                      "bytes":  232503,
                       "sha256":  "869a68f6877617dbfb013c5b091c1c274e8e02617c420b1930878f645f1be3d3"
                   },
                   {
+                      "path":  "protected_accounts\\selected_victims_summary.csv",
+                      "bytes":  91149,
+                      "sha256":  "fba6948cd096c9d265202f23bc66c0d36640f7537626a5b4dc4c25add09d378d"
+                  },
+                  {
                       "path":  "rq3_lr_feature_ablation\\summary_aggregate.json",
+                      "bytes":  10350,
                       "sha256":  "57a9491d7177bf6e78f487f2d69a729b83f91a47664f646d03fea25b75cb04f5"
+                  },
+                  {
+                      "path":  "tables\\live_mempool_microbenchmark.csv",
+                      "bytes":  1078,
+                      "sha256":  "2297269b538617a5f22310571dcb252fd4e6bd47f515f179c4b566f509864095"
+                  },
+                  {
+                      "path":  "tables\\rq1_detection_quality.csv",
+                      "bytes":  415,
+                      "sha256":  "2e9da9e2c88ddb2c700677c1641c11e8bf8ab126da624c457c0b7ed0019050d6"
+                  },
+                  {
+                      "path":  "tables\\rq2_controlled_10000_counterparties.csv",
+                      "bytes":  377,
+                      "sha256":  "c9476c4b5d6f8bf7daa402b2e3fbbcf1af80b62cddb48238fe48850efb305730"
+                  },
+                  {
+                      "path":  "tables\\rq2_full_replay_lookup.csv",
+                      "bytes":  333,
+                      "sha256":  "dc547d7cb539c2df8e621e5862a08e7cb6dbb85fdca57336b308a63f81b115d8"
+                  },
+                  {
+                      "path":  "tables\\rq3_lr_feature_ablation.csv",
+                      "bytes":  373,
+                      "sha256":  "0f171c2c2b12d6fa6df1fa7cd8dbb0611657eaff135d4f47ac462b1034dc8f42"
+                  },
+                  {
+                      "path":  "tables\\rq4_pending_visibility_loss_simulation.csv",
+                      "bytes":  192,
+                      "sha256":  "8f604139a2c38de82599de550e394320ce802cbb5192a4ba567db5984006371e"
                   }
               ]
 }

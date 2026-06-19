@@ -1,14 +1,6 @@
 # Mempool-TrieGuard
 
-Mempool-TrieGuard is a Go and Python research prototype for pre-confirmation Ethereum address-poisoning detection. It keeps recent trusted counterparties for each protected account in prefix/suffix tries, screens pending ERC-20 transfers, and emits explainable alerts when a candidate lookalike is close to trusted history.
-
-## Current Status
-
-- Live mempool realism: the paper now includes a six-hour dRPC `drpc_pendingTransactions` microbenchmark. The run measured 813,092 pending messages, detector p99 latency of 0.016519 ms, lookup p99 latency of 0.023420 ms, and Telegram Bot API acknowledgment p99 of 956.208 ms.
-- Visibility loss: the live run reports a provider-specific public-feed proxy. All included transactions had a 43.003% unseen-pending proxy, while included direct ERC-20 transfer calls had a 24.210% unseen-pending proxy. These numbers describe the observed dRPC feed, not global Ethereum mempool truth or private-order-flow share.
-- Risk score: the old hand-weighted additive score was replaced in the manuscript by a lightweight address-gated logistic regression score. The deployed replay row uses validation-selected `tau=0.901`; threshold sweeps are diagnostic only.
-- Retrieval baselines: RQ2 now compares trie lookup against linear scan, an in-memory database-index baseline, and a DB-LSH-style candidate-generation baseline.
-- Presentation and reproducibility: the manuscript uses `booktabs` tables and a vector TikZ architecture figure. Public code, commands, and the curated paper artifacts live in this repo; raw datasets, full CSV outputs, RPC caches, secrets, and binaries remain untracked.
+Mempool-TrieGuard is a Go and Python research prototype for pre-confirmation Ethereum address-poisoning detection. It keeps time-aware trusted counterparties for protected accounts, indexes them in prefix/suffix tries, screens pending ERC-20 transfers, and emits explainable alerts for lookalike recipients.
 
 ## Repository Map
 
@@ -16,50 +8,35 @@ Mempool-TrieGuard is a Go and Python research prototype for pre-confirmation Eth
 |---|---|
 | `cmd/server` | Web UI, live detector, and live microbenchmark entrypoint. |
 | `cmd/detector-cli` | Replay benchmark CLI used by the Python pipeline. |
-| `internal/detector` | Prefix/suffix trie, baselines, scoring, and detector tests. |
-| `internal/live` | dRPC WebSocket/HTTP live pending-feed benchmark code. |
-| `internal/bench` | Replay metrics and confusion-matrix helpers. |
-| `internal/rpc` | dRPC HTTP/WebSocket helpers. |
-| `internal/store` | SQLite persistence for local app state. |
-| `internal/web` | Server-rendered UI handlers and templates. |
-| `python/benchmark_pipeline.py` | Dataset normalization, replay generation, benchmark orchestration, and reports. |
-| `scripts/` | Helper scripts for dRPC smoke checks, active-account generation, VPS runs, and risk training. |
+| `internal/detector` | Trie retrieval, baselines, scoring, and detector tests. |
+| `internal/live` | dRPC pending-feed benchmark and live artifact writer. |
+| `internal/rpc` | Ethereum HTTP/WebSocket helpers. |
+| `python/benchmark_pipeline.py` | Dataset normalization, replay generation, benchmark orchestration, and CSV/JSON reports. |
+| `scripts/` | Smoke checks, active-account generation, VPS helpers, and risk-training utilities. |
 | `configs/app.yaml` | Default runtime configuration. |
-| `results/paper_artifacts_20260619/` | Curated JSON/JSONL artifacts for the current manuscript tables. |
+| `results/paper_artifacts_20260619/` | Committed paper artifact bundle. |
 
 ## Setup
 
-Prerequisites:
-
-- Go 1.24 or newer.
-- Python 3.11 or newer.
-- Node.js 20 or newer for some Ethereum helper workflows.
-- An Ethereum RPC provider with HTTP and WSS endpoints.
-
-Create local environment variables from the template:
+Install Go 1.24+, Python 3.11+, and an Ethereum RPC provider with HTTP and WSS endpoints. Create local secrets from the template, then verify the build:
 
 ```powershell
 Copy-Item .env.example .env
-```
 
-Never commit `.env`. A PowerShell session can also set values directly:
-
-```powershell
-$env:DRPC_HTTP_URL="https://lb.drpc.live/ethereum/<YOUR_KEY>"
-$env:DRPC_WSS_URL="wss://lb.drpc.live/ethereum/<YOUR_KEY>"
-$env:DRPC_KEY="<YOUR_KEY>"
-$env:APP_BASIC_AUTH_USER="admin"
-$env:APP_BASIC_AUTH_PASS="change-me"
-```
-
-Install and verify:
-
-```powershell
 go mod download
 python -m py_compile python/benchmark_pipeline.py
 go test ./...
 go build -o detector-cli.exe ./cmd/detector-cli
 go build -o server.exe ./cmd/server
+```
+
+Set runtime secrets only through `.env` or the shell. Do not commit real RPC URLs, API keys, Telegram tokens, or passwords.
+
+```powershell
+$env:DRPC_HTTP_URL="https://lb.drpc.live/ethereum/<YOUR_KEY>"
+$env:DRPC_WSS_URL="wss://lb.drpc.live/ethereum/<YOUR_KEY>"
+$env:APP_BASIC_AUTH_USER="admin"
+$env:APP_BASIC_AUTH_PASS="change-me"
 ```
 
 Linux shortcut:
@@ -69,20 +46,21 @@ make verify
 make build-linux
 ```
 
-## Dataset And Replay Benchmark
+## Dataset
 
-The raw address-poisoning dataset is not committed. If you have the source dump or local archive, extract or rename it to this layout:
+The replay benchmark uses the public [Blockchain Address Poisoning (Companion Dataset)](https://kilthub.cmu.edu/articles/dataset/Blockchain_Address_Poisoning_Companion_Dataset_/29212703) from KiltHub/Figshare, DOI `10.1184/R1/29212703`. Download `address_poisoning_ethereum.sql.gz` from that record and extract it into this local layout:
 
 ```text
 dataset/
   address_poisoning_ethereum.sql/
     address_poisoning_ethereum.sql
-data/
-  normalized/
-    address_poisoning_ethereum.normalized.full.parquet
+  payoff_transfers_ethereum.csv
+  payoff_transfers_bsc.csv
 ```
 
-Normalize once:
+The raw SQL dump is about 10 GB after decompression and is intentionally ignored by Git.
+
+Convert the SQL dump to the local Parquet cache used by the pipeline:
 
 ```powershell
 python python/benchmark_pipeline.py `
@@ -92,9 +70,15 @@ python python/benchmark_pipeline.py `
   --dataset-cache data/normalized/address_poisoning_ethereum.normalized.full.parquet
 ```
 
-Run a full-label replay:
+Expected full-cache scope for the current paper run: `34,905,969` rows, `17,365,954` positive poisoning labels, `17,516,047` benign intended-transfer negatives, and `256` victim shards.
+
+## Replay Benchmark
+
+Build the detector CLI, then run the full-label replay from the Parquet cache:
 
 ```powershell
+go build -o detector-cli.exe ./cmd/detector-cli
+
 python -u python/benchmark_pipeline.py `
   --full-label-replay `
   --dataset-cache data/normalized/address_poisoning_ethereum.normalized.full.parquet `
@@ -111,16 +95,16 @@ python -u python/benchmark_pipeline.py `
   --jobs 12
 ```
 
-Protocol notes:
+Protocol rules:
 
-- Legacy additive baselines keep documented fixed thresholds.
-- The current learned LR `mempool_trieguard` replay row uses validation-selected `tau=0.901`.
+- Legacy additive baselines keep their fixed thresholds.
+- The current `mempool_trieguard` paper row uses the learned LR score at validation-selected `tau=0.901`.
 - Do not tune thresholds on the test set.
-- Treat full-label tau sweeps as calibration diagnostics, not replacements for fixed-protocol RQ tables.
+- Treat full-label tau sweeps as calibration diagnostics, not as replacements for the fixed-protocol tables.
 
-## Live Mempool Microbenchmark
+## Live Mempool Benchmark
 
-Build a recent active protected-account file:
+For a fresh live run, build a recent active protected-account file:
 
 ```powershell
 python scripts\build_active_protected_accounts.py `
@@ -136,7 +120,7 @@ python scripts\build_active_protected_accounts.py `
   --out results\live_active_protected_accounts_24h_1000victims.json
 ```
 
-Run the live benchmark:
+Run the six-hour collector:
 
 ```powershell
 $env:APP_PROTECTED_ACCOUNTS_PATH="results\live_active_protected_accounts_24h_1000victims.json"
@@ -146,51 +130,47 @@ go run ./cmd/server --config configs\app.yaml `
   --live-benchmark-out results\live_mempool_YYYYMMDD_HHMM
 ```
 
-Expected artifacts:
+The committed VPS run used `drpc_pendingTransactions`, a 60-second or 5-block warmup exclusion, sequential block accounting, and Telegram Bot API `sendMessage` acceptance timing. Visibility loss is provider-specific public-feed visibility: `1 - included_seen_pending_rate`, not global mempool truth.
 
-- `live_mempool_metrics.json`
-- `run_manifest.json`
-- `live_mempool_events.csv`
-- `live_mempool_blocks.csv`
-- `live_mempool_alerts.jsonl`
+## Result Artifacts
 
-The collector excludes the first 60 seconds or first 5 observed blocks from visibility denominators. Live visibility is computed as `1 - included_seen_pending_rate` for all included transactions and `1 - included_erc20_seen_pending_rate` for included direct ERC-20 transfer-call transactions. Telegram timing is a Bot API `sendMessage` acceptance proxy, not device delivery or read-receipt timing.
-
-## Current Paper Artifact Bundle
-
-The committed artifact folder is intentionally small:
+The committed artifact bundle contains the exact JSON/CSV/JSONL files used for the current paper tables and live supplement:
 
 ```text
 results/paper_artifacts_20260619/
   paper_results_summary.json
+  artifact_inventory.csv
   source_hashes.json
+  tables/
+    rq1_detection_quality.csv
+    rq2_full_replay_lookup.csv
+    rq2_controlled_10000_counterparties.csv
+    rq3_lr_feature_ablation.csv
+    rq4_pending_visibility_loss_simulation.csv
+    live_mempool_microbenchmark.csv
   live_mempool_20260619T0316_1000v/
     live_mempool_metrics.json
-    run_manifest.json
+    live_mempool_blocks.csv
     live_mempool_alerts.jsonl
+    run_manifest.json
   protected_accounts/
+    live_active_protected_accounts_24h_1000victims.json
     live_active_protected_accounts_24h_1000victims.json.manifest.json
+    selected_victims_summary.csv
   rq3_lr_feature_ablation/
     summary_aggregate.json
 ```
 
-It contains JSON/JSONL evidence for the manuscript tables and live alerts. It does not include large CSV event/block streams, raw datasets, Parquet files, RPC caches, full protected-account counterparty lists, binaries, or secrets.
+The full live `live_mempool_events.csv` from the six-hour run is not committed because it is about 244 MB. Raw SQL, Parquet caches, RPC caches, binaries, and local manuscript drafts are also ignored.
 
-## Security And Artifact Policy
+## Reference Numbers
 
-Do not commit:
+- RQ1 learned LR row: precision `0.999923`, recall `0.957455`, F1 `0.978229`.
+- RQ2 full replay lookup: `mempool_trieguard` mean `0.003565` ms vs `linear_scan` mean `0.143894` ms.
+- RQ3 calibrated LR ablation: full address+type+token F1 mean `0.979535`; address-only F1 mean `0.979512`.
+- RQ4 simulated pending loss: recall falls from `0.957455` at `0%` loss to `0.478557` at `50%` loss.
+- Live run: `813,092` pending messages over six hours, detector p99 `0.016519` ms, lookup p99 `0.023420` ms, Telegram acceptance p99 `956.208` ms, visibility loss `43.003%` for all included transactions and `24.210%` for direct ERC-20 transfer calls.
 
-- `.env`, API keys, real dRPC URLs with embedded keys, Telegram bot tokens, or passwords.
-- `data/`, `dataset/`, `dataset.zip`, Parquet files, or local dataset caches.
-- Full generated `results/` directories except `results/paper_artifacts_20260619/`.
-- Local binaries such as `detector-cli.exe`, `server.exe`, DLLs, shared objects, and release builds.
-- Local manuscript drafts under `paper/` unless the repository policy is changed explicitly.
+## Artifact Policy
 
-## Current Headline Results
-
-- Dataset scope: 34,905,969 total rows, 17,365,954 positives, 17,516,047 negatives, 256 shards.
-- RQ1 current LR replay row: precision 0.999923, recall 0.957455, F1 0.978229.
-- RQ2 full replay: `mempool_trieguard` mean lookup 0.003565 ms vs `linear_scan` 0.143894 ms; the controlled 10,000-counterparty setting reports 0.001443 ms for trie lookup.
-- RQ3 calibrated LR ablation: full address+type+token F1 mean 0.979535, only slightly above address-only 0.979512.
-- RQ4 simulated pending loss: recall falls from 0.957455 at 0% loss to 0.478557 at 50% loss.
-- Live supplement: 813,092 pending messages over six hours, detector p99 0.016519 ms, lookup p99 0.023420 ms, alert acknowledgment p99 956.208 ms, provider-specific visibility loss of 43.003% for all included transactions and 24.210% for included ERC-20 transfer calls.
+Commit code, config templates, root documentation, and curated paper artifacts. Do not commit `.env`, real provider URLs, API keys, raw datasets, `dataset/`, `dataset.zip`, `data/`, Parquet files, full generated `results/`, local binaries, or local manuscript drafts under `paper/`.

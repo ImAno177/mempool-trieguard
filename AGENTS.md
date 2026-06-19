@@ -94,7 +94,7 @@ results/paper_artifacts_20260619/
 Do not commit:
 
 - `.env`, `.env.*` except `.env.example`, API keys, dRPC URLs with embedded keys, Telegram bot tokens, or passwords.
-- Raw datasets, `dataset/`, `dataset.zip`, `data/`, Parquet files, local RPC caches, or full generated `results/` trees.
+- Raw datasets, `dataset/`, `dataset.zip`, `data/`, Parquet files, local RPC caches, full live event CSVs, or full generated `results/` trees.
 - Binaries such as `detector-cli.exe`, `server.exe`, shared libraries, or release artifacts.
 - Local manuscript drafts under `paper/` unless the user explicitly changes the repository policy.
 

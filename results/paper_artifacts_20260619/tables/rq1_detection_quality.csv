@@ -1,0 +1,5 @@
+"method","precision","recall","f1","false_alerts_per_account_per_day","timing"
+"confirmed_chain","1","0.283724","0.442033","1.87e-10","post-confirmation"
+"linear_scan","0.978671","0.965444","0.972012","9.12e-4","pre-confirmation replay"
+"address_only_trie","0.999988","0.957288","0.978172","3.44e-8","pre-confirmation replay"
+"mempool_trieguard","0.999923","0.957455","0.978229","1.59e-7","pre-confirmation replay"
