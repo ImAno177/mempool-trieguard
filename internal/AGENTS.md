@@ -33,21 +33,20 @@ This folder contains core Go packages: detector, benchmark metrics, live dRPC in
 
 - `confirmed_chain`: post-confirmation style detector for RQ1.
 - `linear_scan`: compare each pending transfer with the full `R_v` for RQ2.
-- `address_only_trie`, `prefix_only`, `suffix_only`, `no_token`, `no_time`, `no_value`: RQ3 ablations.
+- `address_only_trie`, `prefix_only`, `suffix_only`, `no_token`, `no_type`: current LR-family RQ3 ablations; `no_time` and `no_value` belong to the legacy additive diagnostic sweep.
 - Loss rates are only for `mempool_trieguard` in RQ4.
 
 ## Current RQ2 Position
 
-- Full-label aggregate lookup used in the current manuscript: `mempool_trieguard` mean `0.003023` ms, p95 `0.000000` ms, p99 `0.000092` ms vs `linear_scan` mean `0.143894` ms, p95 `1.070443` ms, p99 `2.258818` ms.
+- Full-label aggregate lookup used in the current manuscript: learned LR `mempool_trieguard` mean `0.003891` ms, p95 `0.000000` ms, p99 `0.000000` ms vs legacy `linear_scan` mean `0.143894` ms, p95 `1.070443` ms, p99 `2.258818` ms.
 - Strict per-wallet scaling artifact: `results/missing_experiments_20260523`.
 - At 10,000 counterparties for the selected high-activity wallet, `mempool_trieguard` lookup mean is `0.000668` ms and `linear_scan` lookup mean is `0.211963` ms across 30 runs.
 - Operational overhead at 10,000 counterparties is `6.491340` ms mean load/update time and `160.88` KB heap per 1,000 counterparties.
 
 ## Current Scoring Finding
 
-- At fixed `tau=0.40`, `address_only_trie` F1 `0.978089` and `no_time` F1 `0.978062` slightly exceed `mempool_trieguard` F1 `0.977797`.
-- Full-label tau sweep finds `mempool_trieguard` best tau `0.395` with F1 `0.977826`, only `+0.000029` over `tau=0.40`.
-- Do not change the risk score just to force the production method above ablations on the same aggregate run.
+- Current learned LR scoring result: full address+type+token is the best canonical 30-run ablation, with F1 mean `0.979535`.
+- Legacy additive tau sweep finds `mempool_trieguard` best tau `0.395` with F1 `0.977826`, only `+0.000029` over `tau=0.40`; keep this as diagnostic history.
 - Any risk-score improvement should be validated on held-out accounts or time ranges and should preserve the time-aware counterparty invariant.
 
 

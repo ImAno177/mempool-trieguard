@@ -23,9 +23,17 @@ detector:
   min_prefix_depth: 3
   min_suffix_depth: 3
   max_candidates_per_side: 2048
-  tau: 0.70
+  tau: 0.901
   lambda: 604800
   weights: [0.30, 0.20, 0.20, 0.15, 0.15]
+  score_mode: "logistic_lr"
+  logistic_intercept: -3.1619704800591686
+  logistic_weights: [-8.127027112801793, 20.659171304234917, 22.44110879456234]
+  address_score_mode: "sum"
+  address_balance_alpha: 0.50
+  address_balance_gamma: 1.0
+  context_gate_base: 0.30
+  context_weights: [0.65, 0.35, 0.0, 0.0]
   tiny_value: 10.0
 
 benchmark:

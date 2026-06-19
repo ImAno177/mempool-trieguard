@@ -24,8 +24,8 @@
 
 - Do not fetch dRPC data repeatedly if a cache is available.
 - Do not use poisoning/lookalike rows as trusted counterparties.
-- For full-label runs, keep `tau=0.40` fixed for all compared methods.
-- Do not use per-method best tau values from tau sweep in RQ tables unless the experiment guide is explicitly changed.
+- For full-label runs, keep thresholds fixed by the documented protocol: legacy additive baselines use their preselected thresholds; the current learned LR `mempool_trieguard` row uses validation-selected `tau=0.901`.
+- Do not use per-method best tau values from tau sweep in RQ tables unless the experiment guide is explicitly changed and the threshold is selected on validation, not test.
 - Preserve output schemas for `metrics.csv`, `ablation.csv`, `stats.json`, `table_for_paper.md`, and `best_config.yaml` when touching legacy paths.
 
 ## Full-Label Replay
@@ -43,11 +43,13 @@
 - Default sweep grid is `0.000` to `1.000` in `0.005` increments.
 - Default swept methods are `mempool_trieguard,address_only_trie,prefix_only,suffix_only,no_token,no_time,no_value`.
 - Main outputs are `full_label_tau_sweep_report.md`, `full_label_tau_sweep_best.csv`, and `full_label_tau_sweep_by_method.csv`.
-- Current interpretation: `tau=0.40` is nearly optimal for `mempool_trieguard`, but address-only and no-time ablations slightly exceed the full score, so risk-score changes need held-out validation.
+- Current interpretation: the old additive `tau=0.40` score was nearly optimal but did not dominate every ablation. The current main detector uses a held-out learned LR address+type+token score; keep the old tau sweep as diagnostic history.
 
 ## Local Result Artifacts
 
-- Current fixed-threshold full-label artifacts used by the manuscript: `results/full_label_daily_rerun_20260525_tau040`.
+- Current MTG-only LR full-label artifacts used by the manuscript: `results/full_label_lr_mtg_only_20260616`.
+- Current LR feature-ablation artifacts used by the manuscript: `results/lr_feature_ablation_canonical_split_victim_30run_20260616`.
+- Legacy fixed-threshold full-label artifacts: `results/full_label_daily_rerun_20260525_tau040`.
 - Earlier fixed-threshold full-label run: `results/full_label_full_dataset_20260514_tau040`.
 - Exploratory tau sweep: `results/full_label_tau_sweep_20260523`.
 - Per-wallet RQ2 scaling and operational overhead: `results/missing_experiments_20260523`.

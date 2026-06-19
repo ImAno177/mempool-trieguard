@@ -110,10 +110,14 @@ TAU_SWEPT_METHODS = {
     "mempool_trieguard",
     "mempool_trieguard_legacy",
     "linear_scan",
+    "db_index",
+    "dblsh2_display",
+    "lsh_apg_display",
     "address_only_trie",
     "prefix_only",
     "suffix_only",
     "intersection_trie",
+    "no_type",
     "no_token",
     "no_time",
     "no_value",
@@ -890,6 +894,12 @@ def parse_list_floats(value: str, default: List[float]) -> List[float]:
     return [float(x.strip()) for x in value.split(",") if x.strip()]
 
 
+def parse_list_ints(value: str, default: List[int]) -> List[int]:
+    if not value:
+        return [int(x) for x in default]
+    return [int(x.strip()) for x in value.split(",") if x.strip()]
+
+
 def method_daily_metrics(method: str, replay_path: Path, summary: dict, context: dict) -> List[dict]:
     replay = read_jsonl(replay_path)
     replay_by_hash = {ev["hash"]: ev for ev in replay}
@@ -1158,7 +1168,7 @@ def lookup_scaling(detector_cli: str, cfg_path: Path, cps: List[dict], replay_pa
             replay_slice = replay_events
         replay_slice_path = results_dir / "lookup_scaling" / f"replay_{size}.jsonl"
         write_jsonl(replay_slice_path, replay_slice)
-        for method in ["mempool_trieguard", "linear_scan"]:
+        for method in ["mempool_trieguard", "linear_scan", "db_index", "dblsh2_display"]:
             out_dir = results_dir / "lookup_scaling" / f"{method}_{size}"
             payload = run_detector(detector_cli, cfg_path, cp_path, replay_slice_path, method, out_dir, token_metadata_path)
             m = payload["metrics"]
@@ -1202,6 +1212,8 @@ def write_table_for_paper(path: Path, rows: List[dict]) -> None:
     labels = [
         ("confirmed_chain", "Confirmed-chain detector"),
         ("linear_scan", "Linear mempool scan"),
+        ("db_index", "DB index baseline"),
+        ("dblsh2_display", "DB-LSH-style display baseline"),
         ("address_only_trie", "Address-only trie"),
         ("mempool_trieguard", "Mempool-TrieGuard"),
     ]
@@ -1585,6 +1597,12 @@ def write_full_label_report(results_dir: Path, manifest: dict, rq1: List[dict], 
     def find(method: str, rows: List[dict]) -> dict:
         return next((r for r in rows if r.get("method") == method), {})
 
+    def fixed_threshold_summary(rows: List[dict]) -> str:
+        taus = sorted({round(float(r["tau"]), 6) for r in rows if r.get("tau") is not None})
+        if not taus:
+            return "not recorded"
+        return ", ".join(f"tau={tau:g}" for tau in taus)
+
     mtg = find("mempool_trieguard", rq1)
     lines = [
         "# Full-Label Dataset Report",
@@ -1597,7 +1615,7 @@ def write_full_label_report(results_dir: Path, manifest: dict, rq1: List[dict], 
         "- positives are `zero_value_transfer OR tiny_transfer OR counterfeit_token_transfer`.",
         "- negatives are valid `intended_transfer` rows excluding poisoning and payoff rows.",
         "- pending observations are replayed as `observed_at = block_time - delay`.",
-        "- production threshold is fixed at `tau=0.40`; baselines and ablations use the same threshold.",
+        f"- replay threshold is fixed by the run configuration ({fixed_threshold_summary(rq1 + rq2 + rq3 + rq4)}).",
         "",
         "## RQ1",
         f"- mempool_trieguard precision={float(mtg.get('precision', 0)):.6f}, recall={float(mtg.get('recall', 0)):.6f}, f1={float(mtg.get('f1', 0)):.6f}.",
@@ -1863,7 +1881,7 @@ def make_latex_results_table(rq1: List[dict], rq2: List[dict], rq3: List[dict], 
         rows.append(f"{label} & {latex_float(r.get('precision', 0))} & {latex_float(r.get('recall', 0))} & {latex_float(r.get('f1', 0))} & {latency} \\\\")
     table = [
         "\\begin{table}[t]",
-        "\\caption{Full-dataset detection quality at $\\tau=0.40$.}",
+        "\\caption{Full-dataset detection quality at configured fixed replay thresholds.}",
         "\\label{tab:results-full}",
         "\\centering",
         "\\footnotesize",
@@ -1878,7 +1896,7 @@ def make_latex_results_table(rq1: List[dict], rq2: List[dict], rq3: List[dict], 
         "\\end{table}",
         "",
         "\\begin{table*}[t]",
-        "\\caption{Full-dataset confusion matrix for RQ1 at $\\tau=0.40$, aggregated over replay delay profiles.}",
+        "\\caption{Full-dataset confusion matrix for RQ1 at configured fixed replay thresholds, aggregated over replay delay profiles.}",
         "\\label{tab:confusion-full}",
         "\\centering",
         "\\footnotesize",
@@ -1920,7 +1938,7 @@ def make_latex_results_table(rq1: List[dict], rq2: List[dict], rq3: List[dict], 
         "\\end{table}",
         "",
         "\\begin{table*}[t]",
-        "\\caption{RQ3 risk-score ablation on the full-label replay at $\\tau=0.40$.}",
+        "\\caption{RQ3 risk-score ablation on the full-label replay at configured fixed replay thresholds.}",
         "\\label{tab:ablation-full}",
         "\\centering",
         "\\footnotesize",
@@ -1978,7 +1996,7 @@ def write_full_dataset_paper(source_tex: Path, dest_tex: Path, manifest: dict, r
             text = text[:start] + make_latex_results_table(rq1, rq2, rq3, rq4) + text[end:]
     text = text.replace(
         "The evaluation should isolate each design choice. Remove the suffix trie to test prefix-only matching, remove the prefix trie to test suffix-only matching, replace trie lookup with hash buckets, vary $\\theta_p$ and $\\theta_s$, remove time decay, and remove token-context features. For each ablation, report precision, recall, latency, and false alerts per account. Statistical comparisons should use paired tests across daily windows and report confidence intervals.",
-        "The full-dataset ablation isolates address-only trie matching, prefix-only retrieval, suffix-only retrieval, token-context removal, time-decay removal, and value-score removal. All ablations use the same fixed threshold $\\tau=0.40$ as the production method so that RQ3 measures component contribution rather than per-method threshold tuning.",
+        "The full-dataset ablation isolates address-only trie matching, prefix-only retrieval, suffix-only retrieval, and context-feature removal. Thresholds are fixed before held-out evaluation so that RQ3 measures component contribution rather than test-set threshold tuning.",
     )
     text = text.replace(
         "Finally, no quantitative claims about Mempool-TrieGuard's empirical performance are made in this draft because the local folder contains no raw mempool capture, implementation, or experiment logs.",
@@ -2113,10 +2131,10 @@ def run_full_label_tau_sweep(args: argparse.Namespace, cfg: dict) -> int:
 
     tau_grid = parse_list_floats(args.tau_grid, default_tau_sweep_grid())
     cfg_path = write_tau_config(cfg, 0.40, results_dir)
-    delays = [int(x) for x in cfg.get("benchmark", {}).get("delay_profiles_seconds", [5, 15, 30])]
+    delays = parse_list_ints(getattr(args, "delay_profiles", ""), cfg.get("benchmark", {}).get("delay_profiles_seconds", [5, 15, 30]))
     loss_rates = parse_list_floats(args.loss_rates, [0.0])
     benchmark_runs = args.benchmark_runs if args.benchmark_runs and args.benchmark_runs > 0 else 1
-    methods = [m.strip() for m in (args.methods or "mempool_trieguard,address_only_trie,prefix_only,suffix_only,no_token,no_time,no_value").split(",") if m.strip()]
+    methods = [m.strip() for m in (args.methods or "mempool_trieguard,address_only_trie,prefix_only,suffix_only,no_type,no_token,no_time,no_value").split(",") if m.strip()]
 
     manifest_path = source_results_dir / "full_label_manifest.json"
     if manifest_path.exists() and (source_results_dir / "full_label_shards").exists():
@@ -2255,14 +2273,15 @@ def run_full_label_pipeline(args: argparse.Namespace, cfg: dict) -> int:
         print(f"[full-label] using token metadata cache: {token_cache_path} ({len(token_metadata)} entries)")
 
     tau_grid = parse_list_floats(args.tau_grid, [0.40])
-    if len(tau_grid) != 1 or abs(float(tau_grid[0]) - 0.40) > 1e-9:
-        print("[full-label] forcing fixed production threshold tau=0.40 for RQ comparability")
-    tau = 0.40
+    if len(tau_grid) != 1:
+        raise ValueError("--full-label-replay expects exactly one fixed tau; use --full-label-tau-sweep for threshold sweeps")
+    tau = float(tau_grid[0])
+    print(f"[full-label] using fixed replay threshold tau={tau:.6f}")
     cfg_path = write_tau_config(cfg, tau, results_dir)
-    delays = [int(x) for x in cfg.get("benchmark", {}).get("delay_profiles_seconds", [5, 15, 30])]
+    delays = parse_list_ints(getattr(args, "delay_profiles", ""), cfg.get("benchmark", {}).get("delay_profiles_seconds", [5, 15, 30]))
     loss_rates = parse_list_floats(args.loss_rates, [0.0, 0.10, 0.25, 0.50])
     benchmark_runs = args.benchmark_runs if args.benchmark_runs and args.benchmark_runs > 0 else 1
-    methods = [m.strip() for m in (args.methods or "confirmed_chain,linear_scan,address_only_trie,mempool_trieguard,prefix_only,suffix_only,no_token,no_time,no_value").split(",") if m.strip()]
+    methods = [m.strip() for m in (args.methods or "confirmed_chain,linear_scan,db_index,dblsh2_display,address_only_trie,mempool_trieguard,prefix_only,suffix_only,no_type,no_token,no_time,no_value").split(",") if m.strip()]
 
     source_results_dir = Path(args.full_label_source_results_dir) if args.full_label_source_results_dir else Path("")
     source_manifest = source_results_dir / "full_label_manifest.json" if source_results_dir else Path("")
@@ -2391,8 +2410,8 @@ def run_full_label_pipeline(args: argparse.Namespace, cfg: dict) -> int:
     write_full_confusion_markdown(results_dir / "full_label_confusion_matrix_by_method.md", by_method, "Full-Label Confusion Matrix By Method")
 
     rq1 = [r for r in by_method if r["method"] in {"confirmed_chain", "mempool_trieguard"}]
-    rq2 = [r for r in by_method if r["method"] in {"linear_scan", "mempool_trieguard"}]
-    rq3 = [r for r in by_method if r["method"] in {"address_only_trie", "prefix_only", "suffix_only", "no_token", "no_time", "no_value", "mempool_trieguard"}]
+    rq2 = [r for r in by_method if r["method"] in {"linear_scan", "db_index", "dblsh2_display", "mempool_trieguard"}]
+    rq3 = [r for r in by_method if r["method"] in {"address_only_trie", "prefix_only", "suffix_only", "no_type", "no_token", "no_time", "no_value", "mempool_trieguard"}]
     rq4_source = [r for r in metric_rows if r["method"] == "mempool_trieguard" and float(r.get("tau", 0)) == tau]
     rq4 = aggregate_full_by(rq4_source, ["method", "tau", "loss_rate"])
 
@@ -2427,6 +2446,7 @@ def main() -> int:
     parser.add_argument("--methods", default="")
     parser.add_argument("--benchmark-runs", type=int, default=0)
     parser.add_argument("--loss-rates", default="")
+    parser.add_argument("--delay-profiles", default="")
     parser.add_argument("--tau-grid", default="")
     parser.add_argument("--dataset-cache", "--dataset-parquet", dest="dataset_cache", default="")
     parser.add_argument("--full-label-replay", action="store_true")
@@ -2467,7 +2487,7 @@ def main() -> int:
         benchmark_runs = min(benchmark_runs, 2)
     loss_rates = parse_list_floats(args.loss_rates, [0.0, 0.25] if args.run_mode == "smoke" else [0.0, 0.10, 0.25, 0.50])
     tau_grid = parse_list_floats(args.tau_grid, [0.30, 0.50, 0.70] if args.run_mode == "smoke" else [0.30, 0.40, 0.50, 0.60, 0.70, 0.75])
-    methods = [m.strip() for m in (args.methods or "confirmed_chain,linear_scan,address_only_trie,mempool_trieguard,prefix_only,suffix_only,no_token,no_time,no_value").split(",") if m.strip()]
+    methods = [m.strip() for m in (args.methods or "confirmed_chain,linear_scan,db_index,dblsh2_display,address_only_trie,mempool_trieguard,prefix_only,suffix_only,no_type,no_token,no_time,no_value").split(",") if m.strip()]
     baseline_tau = float(cfg.get("detector", {}).get("tau", tau_grid[0]))
 
     results_dir = Path(args.results_dir)
@@ -2638,7 +2658,7 @@ def main() -> int:
     write_csv(results_dir / "run_metrics.csv", combined)
     write_csv(results_dir / "daily_metrics.csv", daily_rows)
     write_csv(results_dir / "ablation.csv", combined)
-    write_csv(results_dir / "metrics.csv", [r for r in combined if r["method"] in {"confirmed_chain", "linear_scan", "address_only_trie", "mempool_trieguard"}])
+    write_csv(results_dir / "metrics.csv", [r for r in combined if r["method"] in {"confirmed_chain", "linear_scan", "db_index", "dblsh2_display", "address_only_trie", "mempool_trieguard"}])
     loss_rows = aggregate_loss(combined)
     write_csv(results_dir / "loss_robustness.csv", loss_rows)
     write_confusion_matrices(results_dir, combined)

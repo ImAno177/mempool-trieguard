@@ -48,6 +48,14 @@ type DetectorConfig struct {
 	Tau                  float64   `yaml:"tau"`
 	Lambda               float64   `yaml:"lambda"`
 	Weights              []float64 `yaml:"weights"`
+	ScoreMode            string    `yaml:"score_mode"`
+	LogisticIntercept    float64   `yaml:"logistic_intercept"`
+	LogisticWeights      []float64 `yaml:"logistic_weights"`
+	AddressScoreMode     string    `yaml:"address_score_mode"`
+	AddressBalanceAlpha  float64   `yaml:"address_balance_alpha"`
+	AddressBalanceGamma  float64   `yaml:"address_balance_gamma"`
+	ContextGateBase      float64   `yaml:"context_gate_base"`
+	ContextWeights       []float64 `yaml:"context_weights"`
 	TinyValue            float64   `yaml:"tiny_value"`
 }
 
@@ -88,9 +96,17 @@ func Default() AppConfig {
 			MinPrefixDepth:       3,
 			MinSuffixDepth:       3,
 			MaxCandidatesPerSide: 2048,
-			Tau:                  0.70,
+			Tau:                  0.901,
 			Lambda:               7 * 24 * 3600,
 			Weights:              []float64{0.30, 0.20, 0.20, 0.15, 0.15},
+			ScoreMode:            "logistic_lr",
+			LogisticIntercept:    -3.1619704800591686,
+			LogisticWeights:      []float64{-8.127027112801793, 20.659171304234917, 22.44110879456234},
+			AddressScoreMode:     "sum",
+			AddressBalanceAlpha:  0.50,
+			AddressBalanceGamma:  1.0,
+			ContextGateBase:      0.30,
+			ContextWeights:       []float64{0.65, 0.35, 0.0, 0.0},
 			TinyValue:            10.0,
 		},
 		Benchmark: BenchConfig{
@@ -168,6 +184,12 @@ func overrideFromEnv(cfg *AppConfig) {
 	setInt("DETECTOR_MAX_CANDIDATES_PER_SIDE", &cfg.Detector.MaxCandidatesPerSide)
 	setF64("DETECTOR_TAU", &cfg.Detector.Tau)
 	setF64("DETECTOR_LAMBDA", &cfg.Detector.Lambda)
+	setStr("DETECTOR_SCORE_MODE", &cfg.Detector.ScoreMode)
+	setF64("DETECTOR_LOGISTIC_INTERCEPT", &cfg.Detector.LogisticIntercept)
+	setStr("DETECTOR_ADDRESS_SCORE_MODE", &cfg.Detector.AddressScoreMode)
+	setF64("DETECTOR_ADDRESS_BALANCE_ALPHA", &cfg.Detector.AddressBalanceAlpha)
+	setF64("DETECTOR_ADDRESS_BALANCE_GAMMA", &cfg.Detector.AddressBalanceGamma)
+	setF64("DETECTOR_CONTEXT_GATE_BASE", &cfg.Detector.ContextGateBase)
 	setF64("DETECTOR_TINY_VALUE", &cfg.Detector.TinyValue)
 }
 
@@ -192,6 +214,27 @@ func validate(cfg AppConfig) error {
 	}
 	if len(cfg.Detector.Weights) != 5 {
 		return errors.New("detector weights must have 5 values")
+	}
+	if len(cfg.Detector.LogisticWeights) != 3 {
+		return errors.New("detector logistic_weights must have 3 values")
+	}
+	if cfg.Detector.ScoreMode == "" {
+		cfg.Detector.ScoreMode = "additive"
+	}
+	if cfg.Detector.AddressScoreMode == "" {
+		cfg.Detector.AddressScoreMode = "sum"
+	}
+	if cfg.Detector.AddressBalanceAlpha < 0 || cfg.Detector.AddressBalanceAlpha > 1 {
+		return errors.New("detector address_balance_alpha must be in [0,1]")
+	}
+	if cfg.Detector.AddressBalanceGamma < 0 {
+		return errors.New("detector address_balance_gamma must be >= 0")
+	}
+	if cfg.Detector.ContextGateBase < 0 || cfg.Detector.ContextGateBase >= 1 {
+		return errors.New("detector context_gate_base must be in [0,1)")
+	}
+	if len(cfg.Detector.ContextWeights) != 4 {
+		return errors.New("detector context_weights must have 4 values")
 	}
 	if cfg.Live.SubscriptionName == "" {
 		return errors.New("live subscription_name is required")

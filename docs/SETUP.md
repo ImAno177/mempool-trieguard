@@ -106,6 +106,15 @@ go build -o detector-cli.exe ./cmd/detector-cli
 go build -o server.exe ./cmd/server
 ```
 
+Reviewer/Linux build:
+
+```bash
+make verify
+make build-linux
+```
+
+The Linux server binary is `dist/server-linux-amd64`. GitHub Actions builds the same binary on push and publishes it as a release asset when a `v*` tag is pushed.
+
 ## Run Web UI Locally
 
 ```powershell
@@ -116,6 +125,98 @@ Open:
 
 ```text
 http://localhost:8080
+```
+
+## Run Live Mempool Micro-Benchmark
+
+This is the run mode for the reviewer-requested live mempool experiment. It does not replace the full replay benchmark. It measures provider-facing pending-feed behavior and detector latency on real pending messages.
+
+For a live run, prefer a protected-account file built from recent direct ERC-20 calldata rather than the old replay asset. This matches the live parser, which decodes pending `transfer(address,uint256)` and `transferFrom(address,address,uint256)` calldata. The helper below scans recent full blocks, aggregates bidirectional counterparties, filters selected victim accounts with `eth_getCode` by default, enriches token metadata up to a capped limit, and writes a manifest with the block range and hashes:
+
+```powershell
+python scripts\build_active_protected_accounts.py `
+  --lookback-blocks 1800 `
+  --batch-size 3 `
+  --max-victims 50 `
+  --min-counterparties 10 `
+  --max-counterparties-per-victim 200 `
+  --max-rows 10000 `
+  --metadata-limit 150 `
+  --sleep-ms 25 `
+  --out results\live_active_protected_accounts_6h_50victims.json
+```
+
+dRPC's current free-tier documentation lists 210M CU per 30 days, a usual `120,000` CU/min/IP limit, possible regional reduction to `50,400` CU/min, and a JSON-RPC batch cap of `3` items. Keep `--batch-size 3` or lower on free tier, and avoid repeated smoke subscriptions in a tight loop.
+
+Prepare environment variables on the VPS:
+
+```powershell
+$env:DRPC_HTTP_URL="https://lb.drpc.live/ethereum/<YOUR_KEY>"
+$env:DRPC_WSS_URL="wss://lb.drpc.live/ethereum/<YOUR_KEY>"
+$env:DRPC_KEY="<YOUR_KEY>"
+$env:APP_PROTECTED_ACCOUNTS_PATH="results\live_active_protected_accounts_6h_50victims.json"
+```
+
+Run one 6-hour collection:
+
+```powershell
+.\server.exe --config configs\app.yaml `
+  --live-benchmark-duration 6h `
+  --live-benchmark-out results\live_mempool_YYYYMMDD_HHMM
+```
+
+Linux/VPS shell equivalent:
+
+```bash
+export DRPC_HTTP_URL="https://lb.drpc.live/ethereum/<YOUR_KEY>"
+export DRPC_WSS_URL="wss://lb.drpc.live/ethereum/<YOUR_KEY>"
+export DRPC_KEY="<YOUR_KEY>"
+export APP_PROTECTED_ACCOUNTS_PATH="results/live_active_protected_accounts_6h_50victims.json"
+
+./server --config configs/app.yaml \
+  --live-benchmark-duration 6h \
+  --live-benchmark-out results/live_mempool_YYYYMMDD_HHMM
+```
+
+Expected artifacts:
+
+- `live_mempool_metrics.json` - summary for the paper table.
+- `run_manifest.json` - provider host, region/VPS hint, Go/runtime metadata, git revision when available, config hash, and protected-account hash.
+- `live_mempool_events.csv` - one row per pending-feed message.
+- `live_mempool_blocks.csv` - one post-warmup row per included block.
+- `live_mempool_alerts.jsonl` - emitted alerts, if any.
+
+Run protocol for paper artifacts:
+
+- Run one 2-minute smoke collection first to verify credentials and artifact creation, then wait a few minutes before the final run to avoid provider subscription rate limits.
+- Preferred final run for the reviewer supplement in this checkout: one continuous 6-hour VPS run with the 50-victim recent protected-account file above.
+- A longer 48-hour VPS run remains acceptable if quota and review time allow; report the chosen duration exactly.
+- If the 6-hour run fails, fall back to 3 independent 30-minute collections at different UTC windows and report the shorter protocol explicitly.
+- Set `LIVE_BENCHMARK_REGION` or `VPS_REGION` if you want the manifest to record the deployment region.
+- Accept a visibility run only when `visibility_valid=true`. This requires warmup completion, at least 100 post-warmup blocks, and `subscription_dropped_messages=0`.
+
+The long-run collector retains pending-hash and sender/nonce state for 6 hours to bound memory during long runs, flushes CSV artifacts every 30 seconds, and records WebSocket reconnects in `subscription_reconnects` and `subscription_ids`. Report detector latency from `detector_latency_*` and `lookup_latency_*`, including p50/p95/p99 and the `*_us` or `*_ns` fields when discussing timer resolution. Report provider/enrichment overhead separately from `fetch_latency_*`. Use `pending_messages_per_second`, `pending_interarrival_*`, and `pending_to_block_timestamp_lead_*` to compare detector latency against live feed pressure. Use `included_visibility_loss_rate` and `included_erc20_visibility_loss_rate` only as provider-specific public-pending-feed visibility-loss proxies. Do not report live precision/recall from this run, and do not equate unseen included transactions with private order flow alone.
+
+### VPS Pull From GitHub Release
+
+After pushing a tag such as `v0.1.0-live`, GitHub Actions publishes `server-linux-amd64`. On the VPS:
+
+```bash
+cd ~
+curl -fsSL https://raw.githubusercontent.com/ImAno177/mempool-trieguard/main/scripts/vps_install_release.sh -o vps_install_release.sh
+bash vps_install_release.sh
+
+cd ~/mempool-trieguard
+mkdir -p configs results logs data
+curl -fsSL https://raw.githubusercontent.com/ImAno177/mempool-trieguard/main/configs/app.yaml -o configs/app.yaml
+curl -fsSL https://raw.githubusercontent.com/ImAno177/mempool-trieguard/main/scripts/vps_run_live.sh -o vps_run_live.sh
+chmod +x vps_run_live.sh
+```
+
+Keep `.env` and `results/live_active_protected_accounts_6h_50victims.json` on the VPS, not in Git. Start the run:
+
+```bash
+LIVE_BENCHMARK_DURATION=6h ./vps_run_live.sh
 ```
 
 ## Run Benchmark
@@ -159,7 +260,7 @@ python -u python/benchmark_pipeline.py `
 
 ## Run Tau Sweep
 
-Use this after a full-label run when you want to analyze threshold sensitivity. This is exploratory; keep RQ comparisons at the fixed production threshold `tau=0.40`.
+Use this after a full-label run when you want to analyze threshold sensitivity. This is exploratory for the legacy additive score; current LR detector results must use validation-selected thresholds and no test-set tuning.
 
 ```powershell
 python -u python/benchmark_pipeline.py `
@@ -185,7 +286,9 @@ Main outputs:
 
 Current local result directories:
 
-- `results/full_label_daily_rerun_20260525_tau040` - current fixed-threshold full-label replay artifacts used by the manuscript.
+- `results/full_label_lr_mtg_only_20260616` - current MTG-only learned-LR full-label replay artifacts used by the manuscript.
+- `results/lr_feature_ablation_canonical_split_victim_30run_20260616` - current 30-run LR feature-ablation artifacts used by the manuscript.
+- `results/full_label_daily_rerun_20260525_tau040` - legacy fixed-threshold full-label replay artifacts.
 - `results/full_label_full_dataset_20260514_tau040` - earlier fixed-threshold full-label replay at `tau=0.40`.
 - `results/full_label_tau_sweep_20260523` - exploratory threshold sweep at loss rate `0`.
 - `results/missing_experiments_20260523` - strict per-wallet RQ2 lookup scaling plus operational overhead.

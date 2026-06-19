@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import csv
 import datetime as dt
 import json
@@ -112,10 +113,21 @@ func main() {
 		ThetaP: cfg.Detector.ThetaP, ThetaS: cfg.Detector.ThetaS,
 		MinPrefixDepth: cfg.Detector.MinPrefixDepth, MinSuffixDepth: cfg.Detector.MinSuffixDepth,
 		MaxCandidatesPerSide: cfg.Detector.MaxCandidatesPerSide, Tau: cfg.Detector.Tau,
-		Lambda: cfg.Detector.Lambda, TinyValue: cfg.Detector.TinyValue,
+		Lambda: cfg.Detector.Lambda, ScoreMode: cfg.Detector.ScoreMode,
+		LogisticIntercept: cfg.Detector.LogisticIntercept,
+		AddressScoreMode: cfg.Detector.AddressScoreMode,
+		AddressBalanceAlpha: cfg.Detector.AddressBalanceAlpha,
+		AddressBalanceGamma: cfg.Detector.AddressBalanceGamma,
+		ContextGateBase: cfg.Detector.ContextGateBase, TinyValue: cfg.Detector.TinyValue,
 	}
 	if len(cfg.Detector.Weights) == 5 {
 		copy(dcfg.Weights[:], cfg.Detector.Weights)
+	}
+	if len(cfg.Detector.ContextWeights) == 4 {
+		copy(dcfg.ContextWeights[:], cfg.Detector.ContextWeights)
+	}
+	if len(cfg.Detector.LogisticWeights) == 3 {
+		copy(dcfg.LogisticWeights[:], cfg.Detector.LogisticWeights)
 	}
 	out, err := os.Create(*outPath)
 	if err != nil {
@@ -176,6 +188,8 @@ def main() -> int:
     parser.add_argument("--token-metadata", default="results/rpc_cache/full_dataset_token_metadata_cache.json")
     parser.add_argument("--runs", type=int, default=30)
     parser.add_argument("--sizes", default="10,100,1000,10000")
+    parser.add_argument("--methods", default="mempool_trieguard,linear_scan,db_index,dblsh2_display")
+    parser.add_argument("--jobs", type=int, default=max(1, min(6, os.cpu_count() or 1)))
     args = parser.parse_args()
 
     source_dir = Path(args.source_dir)
@@ -183,33 +197,47 @@ def main() -> int:
     assets = source_dir / "assets"
     replay_path = assets / "replay_shard_0036_victim_f59d4224_10000_delay15.jsonl"
     sizes = [int(x.strip()) for x in args.sizes.split(",") if x.strip()]
-    methods = ["mempool_trieguard", "linear_scan"]
+    methods = [method.strip() for method in args.methods.split(",") if method.strip()]
     out_dir.mkdir(parents=True, exist_ok=True)
     shutil.copytree(assets, out_dir / "assets", dirs_exist_ok=True)
 
-    raw_rows: list[dict[str, object]] = []
+    detector_jobs: list[tuple[int, str, int, Path, Path]] = []
     for size in sizes:
         cp_path = assets / f"counterparties_victim_f59d4224_{size}.json"
         for method in methods:
             for run_id in range(args.runs):
                 run_out = out_dir / "scaling_runs" / f"size_{size:05d}" / method / f"run_{run_id:02d}"
-                payload = run_detector(args, cp_path, replay_path, method, run_out)
-                metrics = payload["metrics"]
-                raw_rows.append(
-                    {
-                        "method": method,
-                        "counterparty_size": size,
-                        "run_id": run_id,
-                        "replay_events": metrics.get("total_events", 0),
-                        "lookup_mean_ms": metrics.get("lookup_mean_ms", 0),
-                        "lookup_p95_ms": metrics.get("lookup_p95_ms", 0),
-                        "lookup_p99_ms": metrics.get("lookup_p99_ms", 0),
-                        "throughput_tps": metrics.get("throughput_tps", 0),
-                        "average_candidates_scored": metrics.get("average_candidates_scored", 0),
-                        "f1": metrics.get("f1", 0),
-                    }
-                )
-                print(f"scaling size={size} method={method} run={run_id:02d}", flush=True)
+                detector_jobs.append((size, method, run_id, cp_path, run_out))
+
+    raw_rows: list[dict[str, object]] = []
+    completed = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, int(args.jobs))) as executor:
+        futures = {
+            executor.submit(run_detector, args, cp_path, replay_path, method, run_out): (size, method, run_id)
+            for size, method, run_id, cp_path, run_out in detector_jobs
+        }
+        for fut in concurrent.futures.as_completed(futures):
+            size, method, run_id = futures[fut]
+            payload = fut.result()
+            metrics = payload["metrics"]
+            raw_rows.append(
+                {
+                    "method": method,
+                    "counterparty_size": size,
+                    "run_id": run_id,
+                    "replay_events": metrics.get("total_events", 0),
+                    "lookup_mean_ms": metrics.get("lookup_mean_ms", 0),
+                    "lookup_p95_ms": metrics.get("lookup_p95_ms", 0),
+                    "lookup_p99_ms": metrics.get("lookup_p99_ms", 0),
+                    "throughput_tps": metrics.get("throughput_tps", 0),
+                    "average_candidates_scored": metrics.get("average_candidates_scored", 0),
+                    "f1": metrics.get("f1", 0),
+                }
+            )
+            completed += 1
+            print(f"scaling [{completed}/{len(detector_jobs)}] size={size} method={method} run={run_id:02d}", flush=True)
+
+    raw_rows.sort(key=lambda row: (int(row["counterparty_size"]), str(row["method"]), int(row["run_id"])))
     write_csv(out_dir / "rq2_per_wallet_scaling_raw.csv", raw_rows)
 
     summary_rows: list[dict[str, object]] = []

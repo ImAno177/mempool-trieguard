@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -126,17 +127,51 @@ func HexToFloat(s string) float64 {
 }
 
 type RPCTransaction struct {
-	Hash  string `json:"hash"`
-	From  string `json:"from"`
-	To    string `json:"to"`
-	Value string `json:"value"`
-	Input string `json:"input"`
+	Hash                 string `json:"hash"`
+	From                 string `json:"from"`
+	To                   string `json:"to"`
+	Nonce                string `json:"nonce,omitempty"`
+	Value                string `json:"value"`
+	Input                string `json:"input"`
+	Gas                  string `json:"gas,omitempty"`
+	GasPrice             string `json:"gasPrice,omitempty"`
+	MaxFeePerGas         string `json:"maxFeePerGas,omitempty"`
+	MaxPriorityFeePerGas string `json:"maxPriorityFeePerGas,omitempty"`
+	BlockHash            string `json:"blockHash,omitempty"`
+	BlockNumber          string `json:"blockNumber,omitempty"`
+	TransactionIndex     string `json:"transactionIndex,omitempty"`
 }
 
 func (c *Client) GetTransactionByHash(ctx context.Context, hash string) (RPCTransaction, error) {
 	var tx RPCTransaction
 	err := c.Call(ctx, "eth_getTransactionByHash", []interface{}{hash}, &tx)
 	return tx, err
+}
+
+type RPCTransactionReceipt struct {
+	TransactionHash string `json:"transactionHash"`
+	BlockHash       string `json:"blockHash"`
+	BlockNumber     string `json:"blockNumber"`
+	Status          string `json:"status"`
+}
+
+func (c *Client) GetTransactionReceipt(ctx context.Context, hash string) (RPCTransactionReceipt, error) {
+	var receipt RPCTransactionReceipt
+	err := c.Call(ctx, "eth_getTransactionReceipt", []interface{}{hash}, &receipt)
+	return receipt, err
+}
+
+type RPCBlock struct {
+	Number       string           `json:"number"`
+	Hash         string           `json:"hash"`
+	Timestamp    string           `json:"timestamp"`
+	Transactions []RPCTransaction `json:"transactions"`
+}
+
+func (c *Client) GetBlockByNumber(ctx context.Context, tag string, fullTransactions bool) (RPCBlock, error) {
+	var block RPCBlock
+	err := c.Call(ctx, "eth_getBlockByNumber", []interface{}{tag, fullTransactions}, &block)
+	return block, err
 }
 
 type Subscription struct {
@@ -146,6 +181,7 @@ type Subscription struct {
 	Errors         chan error
 	cancelOnce     sync.Once
 	cancelFn       context.CancelFunc
+	dropped        atomic.Int64
 }
 
 func (c *Client) Subscribe(ctx context.Context, methodName string) (*Subscription, error) {
@@ -237,11 +273,25 @@ func (s *Subscription) readLoop(ctx context.Context) {
 		if envelope.Method != "eth_subscription" {
 			continue
 		}
-		select {
-		case s.RawMessages <- envelope.Params.Result:
-		default:
-		}
+		s.enqueueRawMessage(envelope.Params.Result)
 	}
+}
+
+func (s *Subscription) enqueueRawMessage(raw json.RawMessage) bool {
+	select {
+	case s.RawMessages <- raw:
+		return true
+	default:
+		s.dropped.Add(1)
+		return false
+	}
+}
+
+func (s *Subscription) DroppedCount() int64 {
+	if s == nil {
+		return 0
+	}
+	return s.dropped.Load()
 }
 
 // DecodePendingResult supports either tx hash string or tx object payload.

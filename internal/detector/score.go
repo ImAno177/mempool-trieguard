@@ -8,16 +8,22 @@ import (
 )
 
 func computeScore(cfg Config, metadata map[string]TokenMetadata, pending PendingTx, cp Counterparty, lookalike string, ap int, as int) ScoreBreakdown {
-	addrScore := float64(min(ap, cfg.KP)+min(as, cfg.KS)) / float64(cfg.KP+cfg.KS)
+	rawAddrScore := float64(min(ap, cfg.KP)+min(as, cfg.KS)) / float64(cfg.KP+cfg.KS)
+	addrScore := addressEvidenceScore(cfg, rawAddrScore, ap, as)
 	typeScore := transferTypeScore(cfg, pending)
 	tokenScore := tokenContextScore(metadata, pending.TokenAddress, cp)
-	delta := pending.ObservedAt.Sub(cp.LastSeen).Seconds()
-	if delta < 0 {
-		delta = 0
+	mode := strings.TrimSpace(strings.ToLower(cfg.ScoreMode))
+	timeScore := 0.0
+	valueScore := 0.0
+	if mode != "logistic_lr" && mode != "logistic" {
+		delta := pending.ObservedAt.Sub(cp.LastSeen).Seconds()
+		if delta < 0 {
+			delta = 0
+		}
+		timeScore = math.Exp(-delta / cfg.Lambda)
+		valueScore = valueRiskScore(cfg, normalizedValue(pending))
 	}
-	timeScore := math.Exp(-delta / cfg.Lambda)
-	valueScore := valueRiskScore(cfg, normalizedValue(pending))
-	total := cfg.Weights[0]*addrScore + cfg.Weights[1]*typeScore + cfg.Weights[2]*tokenScore + cfg.Weights[3]*timeScore + cfg.Weights[4]*valueScore
+	total := scoreTotal(cfg, addrScore, typeScore, tokenScore, timeScore, valueScore)
 	return ScoreBreakdown{
 		Address: addrScore,
 		Type:    typeScore,
@@ -25,6 +31,79 @@ func computeScore(cfg Config, metadata map[string]TokenMetadata, pending Pending
 		Time:    timeScore,
 		Value:   valueScore,
 		Total:   total,
+	}
+}
+
+func addressEvidenceScore(cfg Config, rawAddrScore float64, ap int, as int) float64 {
+	switch strings.TrimSpace(strings.ToLower(cfg.AddressScoreMode)) {
+	case "prefix", "prefix_only":
+		if cfg.KP <= 0 {
+			return 0
+		}
+		return float64(min(ap, cfg.KP)) / float64(cfg.KP)
+	case "suffix", "suffix_only":
+		if cfg.KS <= 0 {
+			return 0
+		}
+		return float64(min(as, cfg.KS)) / float64(cfg.KS)
+	case "balanced", "balanced_sum", "balance":
+		prefix := float64(min(ap, cfg.KP)) / float64(cfg.KP)
+		suffix := float64(min(as, cfg.KS)) / float64(cfg.KS)
+		mx := math.Max(prefix, suffix)
+		if mx <= 0 {
+			return 0
+		}
+		mn := math.Min(prefix, suffix)
+		balance := mn / mx
+		alpha := cfg.AddressBalanceAlpha
+		if alpha < 0 || alpha > 1 {
+			alpha = 0.50
+		}
+		gamma := cfg.AddressBalanceGamma
+		if gamma <= 0 {
+			gamma = 1.0
+		}
+		return rawAddrScore * (alpha + (1-alpha)*math.Pow(balance, gamma))
+	default:
+		return rawAddrScore
+	}
+}
+
+func scoreTotal(cfg Config, addrScore, typeScore, tokenScore, timeScore, valueScore float64) float64 {
+	switch strings.TrimSpace(strings.ToLower(cfg.ScoreMode)) {
+	case "logistic_lr", "logistic":
+		logit := cfg.LogisticIntercept +
+			cfg.LogisticWeights[0]*addrScore +
+			cfg.LogisticWeights[1]*addrScore*typeScore +
+			cfg.LogisticWeights[2]*addrScore*tokenScore
+		return 1.0 / (1.0 + math.Exp(-logit))
+	case "context_gate", "context_gated_temporal":
+		base := cfg.ContextGateBase
+		if base <= 0 || base >= 1 {
+			base = 0.30
+		}
+		weights := cfg.ContextWeights
+		sum := 0.0
+		for _, weight := range weights {
+			sum += weight
+		}
+		if sum <= 0 {
+			weights = [4]float64{0.65, 0.35, 0.0, 0.0}
+			sum = 1.0
+		}
+		conditionedTime := timeScore * math.Max(typeScore, tokenScore)
+		context := (weights[0]*typeScore + weights[1]*tokenScore + weights[2]*valueScore + weights[3]*conditionedTime) / sum
+		if context < 0 {
+			context = 0
+		}
+		if context > 1 {
+			context = 1
+		}
+		return addrScore * (base + (1-base)*context)
+	case "address_only":
+		return addrScore
+	default:
+		return cfg.Weights[0]*addrScore + cfg.Weights[1]*typeScore + cfg.Weights[2]*tokenScore + cfg.Weights[3]*timeScore + cfg.Weights[4]*valueScore
 	}
 }
 

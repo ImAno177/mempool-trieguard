@@ -14,6 +14,14 @@ type Config struct {
 	Tau                  float64
 	Lambda               float64
 	Weights              [5]float64
+	ScoreMode            string
+	LogisticIntercept    float64
+	LogisticWeights      [3]float64
+	AddressScoreMode     string
+	AddressBalanceAlpha  float64
+	AddressBalanceGamma  float64
+	ContextGateBase      float64
+	ContextWeights       [4]float64
 	TinyValue            float64
 }
 

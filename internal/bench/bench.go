@@ -767,7 +767,12 @@ func buildDetectorRunner(method string, eng *detector.Engine, cfg detector.Confi
 		}, nil
 	case "address_only_trie":
 		tmp := cfg
-		tmp.Weights = [5]float64{1, 0, 0, 0, 0}
+		if isLogisticMode(tmp) {
+			tmp = ablateToAddressOnly(tmp)
+		} else {
+			tmp.Weights = [5]float64{1, 0, 0, 0, 0}
+			tmp.ScoreMode = "address_only"
+		}
 		tmpEng := detector.NewEngine(tmp)
 		if err := tmpEng.LoadCounterparties(cps); err != nil {
 			return nil, err
@@ -778,6 +783,7 @@ func buildDetectorRunner(method string, eng *detector.Engine, cfg detector.Confi
 		}, nil
 	case "prefix_only":
 		tmp := cfg
+		tmp.AddressScoreMode = "prefix_only"
 		tmpEng := detector.NewEngine(tmp)
 		if err := tmpEng.LoadCounterparties(cps); err != nil {
 			return nil, err
@@ -788,6 +794,7 @@ func buildDetectorRunner(method string, eng *detector.Engine, cfg detector.Confi
 		}, nil
 	case "suffix_only":
 		tmp := cfg
+		tmp.AddressScoreMode = "suffix_only"
 		tmpEng := detector.NewEngine(tmp)
 		if err := tmpEng.LoadCounterparties(cps); err != nil {
 			return nil, err
@@ -806,15 +813,34 @@ func buildDetectorRunner(method string, eng *detector.Engine, cfg detector.Confi
 		return func(ev ReplayEvent) ([]detector.Alert, []detector.PerfRecord) {
 			return tmpEng.DetectIntersection(ev.PendingTx)
 		}, nil
+	case "no_type":
+		return runnerWithAblatedScoreComponent(cfg, cps, metadata, 1, 0)
 	case "no_token":
-		return runnerWithWeights(cfg, cps, metadata, zeroAndRenormalize(cfg.Weights, 2), detectorModeDefault)
+		return runnerWithAblatedScoreComponent(cfg, cps, metadata, 2, 1)
 	case "no_time":
-		return runnerWithWeights(cfg, cps, metadata, zeroAndRenormalize(cfg.Weights, 3), detectorModeDefault)
+		return runnerWithAblatedScoreComponent(cfg, cps, metadata, 3, 3)
 	case "no_value":
-		return runnerWithWeights(cfg, cps, metadata, zeroAndRenormalize(cfg.Weights, 4), detectorModeDefault)
+		return runnerWithAblatedScoreComponent(cfg, cps, metadata, 4, 2)
 	case "linear_scan":
 		return func(ev ReplayEvent) ([]detector.Alert, []detector.PerfRecord) {
 			return eng.DetectLinear(ev.PendingTx)
+		}, nil
+	case "db_index":
+		if err := eng.PrebuildDBIndex(); err != nil {
+			return nil, err
+		}
+		return func(ev ReplayEvent) ([]detector.Alert, []detector.PerfRecord) {
+			return eng.DetectDBIndex(ev.PendingTx)
+		}, nil
+	case "dblsh2_display":
+		eng.PrebuildDisplayIndexes(false)
+		return func(ev ReplayEvent) ([]detector.Alert, []detector.PerfRecord) {
+			return eng.DetectDBLSHDisplay(ev.PendingTx)
+		}, nil
+	case "lsh_apg_display":
+		eng.PrebuildDisplayIndexes(true)
+		return func(ev ReplayEvent) ([]detector.Alert, []detector.PerfRecord) {
+			return eng.DetectLSHAPGDisplay(ev.PendingTx)
 		}, nil
 	default:
 		return func(ev ReplayEvent) ([]detector.Alert, []detector.PerfRecord) {
@@ -833,7 +859,12 @@ func buildScoreRunner(method string, eng *detector.Engine, cfg detector.Config, 
 		}, nil
 	case "address_only_trie":
 		tmp := cfg
-		tmp.Weights = [5]float64{1, 0, 0, 0, 0}
+		if isLogisticMode(tmp) {
+			tmp = ablateToAddressOnly(tmp)
+		} else {
+			tmp.Weights = [5]float64{1, 0, 0, 0, 0}
+			tmp.ScoreMode = "address_only"
+		}
 		tmpEng := detector.NewEngine(tmp)
 		if err := tmpEng.LoadCounterparties(cps); err != nil {
 			return nil, err
@@ -843,7 +874,9 @@ func buildScoreRunner(method string, eng *detector.Engine, cfg detector.Config, 
 			return tmpEng.MaxScore(ev.PendingTx)
 		}, nil
 	case "prefix_only":
-		tmpEng := detector.NewEngine(cfg)
+		tmp := cfg
+		tmp.AddressScoreMode = "prefix_only"
+		tmpEng := detector.NewEngine(tmp)
 		if err := tmpEng.LoadCounterparties(cps); err != nil {
 			return nil, err
 		}
@@ -852,7 +885,9 @@ func buildScoreRunner(method string, eng *detector.Engine, cfg detector.Config, 
 			return tmpEng.MaxScorePrefixOnly(ev.PendingTx)
 		}, nil
 	case "suffix_only":
-		tmpEng := detector.NewEngine(cfg)
+		tmp := cfg
+		tmp.AddressScoreMode = "suffix_only"
+		tmpEng := detector.NewEngine(tmp)
 		if err := tmpEng.LoadCounterparties(cps); err != nil {
 			return nil, err
 		}
@@ -869,12 +904,31 @@ func buildScoreRunner(method string, eng *detector.Engine, cfg detector.Config, 
 		return func(ev ReplayEvent) (detector.ScoreResult, []detector.PerfRecord) {
 			return tmpEng.MaxScoreIntersection(ev.PendingTx)
 		}, nil
+	case "no_type":
+		return runnerWithAblatedScoreComponentForSweep(cfg, cps, metadata, 1, 0)
 	case "no_token":
-		return runnerWithScoreWeights(cfg, cps, metadata, zeroAndRenormalize(cfg.Weights, 2))
+		return runnerWithAblatedScoreComponentForSweep(cfg, cps, metadata, 2, 1)
 	case "no_time":
-		return runnerWithScoreWeights(cfg, cps, metadata, zeroAndRenormalize(cfg.Weights, 3))
+		return runnerWithAblatedScoreComponentForSweep(cfg, cps, metadata, 3, 3)
 	case "no_value":
-		return runnerWithScoreWeights(cfg, cps, metadata, zeroAndRenormalize(cfg.Weights, 4))
+		return runnerWithAblatedScoreComponentForSweep(cfg, cps, metadata, 4, 2)
+	case "db_index":
+		if err := eng.PrebuildDBIndex(); err != nil {
+			return nil, err
+		}
+		return func(ev ReplayEvent) (detector.ScoreResult, []detector.PerfRecord) {
+			return eng.MaxScoreDBIndex(ev.PendingTx)
+		}, nil
+	case "dblsh2_display":
+		eng.PrebuildDisplayIndexes(false)
+		return func(ev ReplayEvent) (detector.ScoreResult, []detector.PerfRecord) {
+			return eng.MaxScoreDBLSHDisplay(ev.PendingTx)
+		}, nil
+	case "lsh_apg_display":
+		eng.PrebuildDisplayIndexes(true)
+		return func(ev ReplayEvent) (detector.ScoreResult, []detector.PerfRecord) {
+			return eng.MaxScoreLSHAPGDisplay(ev.PendingTx)
+		}, nil
 	default:
 		return nil, fmt.Errorf("tau sweep does not support method %q", method)
 	}
@@ -891,6 +945,79 @@ func runnerWithScoreWeights(cfg detector.Config, cps []detector.Counterparty, me
 	return func(ev ReplayEvent) (detector.ScoreResult, []detector.PerfRecord) {
 		return tmpEng.MaxScore(ev.PendingTx)
 	}, nil
+}
+
+func runnerWithAblatedScoreComponent(cfg detector.Config, cps []detector.Counterparty, metadata []detector.TokenMetadata, additiveIdx int, contextIdx int) (func(ReplayEvent) ([]detector.Alert, []detector.PerfRecord), error) {
+	tmp := ablateScoreComponent(cfg, additiveIdx, contextIdx)
+	tmpEng := detector.NewEngine(tmp)
+	if err := tmpEng.LoadCounterparties(cps); err != nil {
+		return nil, err
+	}
+	tmpEng.SetTokenMetadata(metadata)
+	return func(ev ReplayEvent) ([]detector.Alert, []detector.PerfRecord) {
+		return tmpEng.Detect(ev.PendingTx)
+	}, nil
+}
+
+func runnerWithAblatedScoreComponentForSweep(cfg detector.Config, cps []detector.Counterparty, metadata []detector.TokenMetadata, additiveIdx int, contextIdx int) (scoreRunner, error) {
+	tmp := ablateScoreComponent(cfg, additiveIdx, contextIdx)
+	tmpEng := detector.NewEngine(tmp)
+	if err := tmpEng.LoadCounterparties(cps); err != nil {
+		return nil, err
+	}
+	tmpEng.SetTokenMetadata(metadata)
+	return func(ev ReplayEvent) (detector.ScoreResult, []detector.PerfRecord) {
+		return tmpEng.MaxScore(ev.PendingTx)
+	}, nil
+}
+
+func ablateScoreComponent(cfg detector.Config, additiveIdx int, contextIdx int) detector.Config {
+	if isLogisticMode(cfg) {
+		switch additiveIdx {
+		case 1:
+			cfg.LogisticWeights[0] += cfg.LogisticWeights[1] * logisticTypeFloor
+			cfg.LogisticWeights[1] = 0
+		case 2:
+			cfg.LogisticWeights[0] += cfg.LogisticWeights[2] * logisticTokenFloor
+			cfg.LogisticWeights[2] = 0
+		}
+		return cfg
+	}
+	if isContextGateMode(cfg) {
+		if contextIdx >= 0 && contextIdx < len(cfg.ContextWeights) {
+			cfg.ContextWeights[contextIdx] = 0
+		}
+		return cfg
+	}
+	cfg.Weights = zeroAndRenormalize(cfg.Weights, additiveIdx)
+	return cfg
+}
+
+func isContextGateMode(cfg detector.Config) bool {
+	mode := strings.TrimSpace(strings.ToLower(cfg.ScoreMode))
+	return mode == "context_gate" || mode == "context_gated_temporal"
+}
+
+func isLogisticMode(cfg detector.Config) bool {
+	mode := strings.TrimSpace(strings.ToLower(cfg.ScoreMode))
+	return mode == "logistic_lr" || mode == "logistic"
+}
+
+const (
+	logisticTypeFloor  = 0.25
+	logisticTokenFloor = 0.20
+)
+
+func ablateToAddressOnly(cfg detector.Config) detector.Config {
+	if isLogisticMode(cfg) {
+		cfg.LogisticWeights[0] += cfg.LogisticWeights[1]*logisticTypeFloor + cfg.LogisticWeights[2]*logisticTokenFloor
+		cfg.LogisticWeights[1] = 0
+		cfg.LogisticWeights[2] = 0
+		return cfg
+	}
+	cfg.Weights = [5]float64{1, 0, 0, 0, 0}
+	cfg.ScoreMode = "address_only"
+	return cfg
 }
 
 type detectorMode int

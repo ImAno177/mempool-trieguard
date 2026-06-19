@@ -20,7 +20,7 @@ func main() {
 	counterpartiesPath := flag.String("counterparties", "", "counterparties json path")
 	replayPath := flag.String("replay", "", "replay jsonl path")
 	tokenMetadataPath := flag.String("token-metadata", "", "optional token metadata json path")
-	method := flag.String("method", "mempool_trieguard", "method: mempool_trieguard|mempool_trieguard_legacy|confirmed_chain|linear_scan|address_only_trie|prefix_only|suffix_only|intersection_trie|no_token|no_time|no_value")
+	method := flag.String("method", "mempool_trieguard", "method: mempool_trieguard|mempool_trieguard_legacy|confirmed_chain|linear_scan|db_index|dblsh2_display|lsh_apg_display|address_only_trie|prefix_only|suffix_only|intersection_trie|no_type|no_token|no_time|no_value")
 	outDir := flag.String("out", "results", "output directory")
 	noAlerts := flag.Bool("no-alerts", false, "omit alert JSONL and alert payload in summary")
 	dailyMetrics := flag.Bool("daily-metrics", false, "write per-day metrics in addition to aggregate metrics")
@@ -65,10 +65,22 @@ func main() {
 		MaxCandidatesPerSide: cfg.Detector.MaxCandidatesPerSide,
 		Tau:                  cfg.Detector.Tau,
 		Lambda:               cfg.Detector.Lambda,
+		ScoreMode:            cfg.Detector.ScoreMode,
+		LogisticIntercept:    cfg.Detector.LogisticIntercept,
+		AddressScoreMode:     cfg.Detector.AddressScoreMode,
+		AddressBalanceAlpha:  cfg.Detector.AddressBalanceAlpha,
+		AddressBalanceGamma:  cfg.Detector.AddressBalanceGamma,
+		ContextGateBase:      cfg.Detector.ContextGateBase,
 		TinyValue:            cfg.Detector.TinyValue,
 	}
 	if len(cfg.Detector.Weights) == 5 {
 		copy(dcfg.Weights[:], cfg.Detector.Weights)
+	}
+	if len(cfg.Detector.ContextWeights) == 4 {
+		copy(dcfg.ContextWeights[:], cfg.Detector.ContextWeights)
+	}
+	if len(cfg.Detector.LogisticWeights) == 3 {
+		copy(dcfg.LogisticWeights[:], cfg.Detector.LogisticWeights)
 	}
 
 	var dayIndex *bench.DayBoundaryIndex

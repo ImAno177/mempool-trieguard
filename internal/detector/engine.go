@@ -11,6 +11,8 @@ type victimIndex struct {
 	Prefix     *Trie
 	Suffix     *Trie
 	Recipients map[string][]Counterparty // key: normalized trusted recipient
+	displayMu  sync.Mutex
+	display    *displayANNIndex
 }
 
 type Engine struct {
@@ -18,6 +20,8 @@ type Engine struct {
 	indices  map[string]*victimIndex
 	victims  map[string]struct{}
 	metadata map[string]TokenMetadata
+	dbMu     sync.Mutex
+	dbIndex  *dbCandidateIndex
 	mu       sync.RWMutex
 }
 
@@ -54,6 +58,13 @@ func (e *Engine) SetTokenMetadata(metadata []TokenMetadata) {
 }
 
 func (e *Engine) LoadCounterparties(counterparties []Counterparty) error {
+	e.dbMu.Lock()
+	if e.dbIndex != nil {
+		_ = e.dbIndex.Close()
+		e.dbIndex = nil
+	}
+	e.dbMu.Unlock()
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -147,6 +158,90 @@ func (e *Engine) DetectSuffixOnly(p PendingTx) ([]Alert, []PerfRecord) {
 
 func (e *Engine) MaxScoreSuffixOnly(p PendingTx) (ScoreResult, []PerfRecord) {
 	return e.maxScoreByTrieMode(p, candidateSuffixOnly, true)
+}
+
+// PrebuildDisplayIndexes builds paper-baseline display indexes outside timed
+// replay loops so RQ2 lookup latency measures query work rather than setup.
+func (e *Engine) PrebuildDisplayIndexes(buildAPG bool) {
+	e.mu.RLock()
+	indices := make([]*victimIndex, 0, len(e.indices))
+	for _, idx := range e.indices {
+		indices = append(indices, idx)
+	}
+	e.mu.RUnlock()
+
+	for _, idx := range indices {
+		ann := idx.ensureDisplayANNIndex()
+		if buildAPG {
+			ann.ensureAPG()
+		}
+	}
+}
+
+// PrebuildDBIndex builds the SQL-index baseline outside timed replay loops.
+func (e *Engine) PrebuildDBIndex() error {
+	_, err := e.ensureDBCandidateIndex()
+	return err
+}
+
+// DetectDBLSHDisplay uses a DB-LSH-style dynamic-bucketing retrieval baseline
+// over displayed address nibbles, then applies the same risk scoring and
+// threshold as the production detector. It adapts the ICDE 2022 DB-LSH idea;
+// it is not the original C++ artifact or a later journal extension.
+func (e *Engine) DetectDBLSHDisplay(p PendingTx) ([]Alert, []PerfRecord) {
+	return e.detectByDisplayCandidateFunc(p, func(_ string, idx *victimIndex, lookalike string) map[string]struct{} {
+		return idx.ensureDisplayANNIndex().CandidateIDsDBLSH(lookalike, displayCandidateCap(e.cfg))
+	})
+}
+
+func (e *Engine) MaxScoreDBLSHDisplay(p PendingTx) (ScoreResult, []PerfRecord) {
+	return e.maxScoreByDisplayCandidateFunc(p, func(_ string, idx *victimIndex, lookalike string) map[string]struct{} {
+		return idx.ensureDisplayANNIndex().CandidateIDsDBLSH(lookalike, displayCandidateCap(e.cfg))
+	})
+}
+
+// DetectLSHAPGDisplay uses an LSH-APG-style graph built from DB-LSH candidate
+// proposals over displayed address vectors, then reuses the detector scorer.
+func (e *Engine) DetectLSHAPGDisplay(p PendingTx) ([]Alert, []PerfRecord) {
+	return e.detectByDisplayCandidateFunc(p, func(_ string, idx *victimIndex, lookalike string) map[string]struct{} {
+		return idx.ensureDisplayANNIndex().CandidateIDsAPG(lookalike, displayCandidateCap(e.cfg))
+	})
+}
+
+func (e *Engine) MaxScoreLSHAPGDisplay(p PendingTx) (ScoreResult, []PerfRecord) {
+	return e.maxScoreByDisplayCandidateFunc(p, func(_ string, idx *victimIndex, lookalike string) map[string]struct{} {
+		return idx.ensureDisplayANNIndex().CandidateIDsAPG(lookalike, displayCandidateCap(e.cfg))
+	})
+}
+
+// DetectDBIndex uses a traditional SQL B-tree index over materialized
+// prefix/suffix columns, then reuses the same risk scorer and threshold.
+func (e *Engine) DetectDBIndex(p PendingTx) ([]Alert, []PerfRecord) {
+	dbIdx, err := e.ensureDBCandidateIndex()
+	if err != nil {
+		return []Alert{}, []PerfRecord{}
+	}
+	return e.detectByDisplayCandidateFunc(p, func(victim string, _ *victimIndex, lookalike string) map[string]struct{} {
+		ids, err := dbIdx.CandidateIDs(victim, lookalike, e.cfg.MaxCandidatesPerSide)
+		if err != nil {
+			return map[string]struct{}{}
+		}
+		return ids
+	})
+}
+
+func (e *Engine) MaxScoreDBIndex(p PendingTx) (ScoreResult, []PerfRecord) {
+	dbIdx, err := e.ensureDBCandidateIndex()
+	if err != nil {
+		return ScoreResult{}, []PerfRecord{}
+	}
+	return e.maxScoreByDisplayCandidateFunc(p, func(victim string, _ *victimIndex, lookalike string) map[string]struct{} {
+		ids, err := dbIdx.CandidateIDs(victim, lookalike, e.cfg.MaxCandidatesPerSide)
+		if err != nil {
+			return map[string]struct{}{}
+		}
+		return ids
+	})
 }
 
 func (e *Engine) detectByTrieMode(p PendingTx, mode trieCandidateMode, cumulative bool) ([]Alert, []PerfRecord) {
@@ -249,6 +344,149 @@ func (e *Engine) maxScoreByTrieMode(p PendingTx, mode trieCandidateMode, cumulat
 			continue
 		}
 		candidateIDs := e.candidateIDs(idx, p, lookalike, mode, cumulative)
+
+		scored := 0
+		for r := range candidateIDs {
+			if r == lookalike {
+				continue
+			}
+			histories := idx.Recipients[r]
+			ap := prefixMatchNibbles(lookalike, r)
+			as := suffixMatchNibbles(lookalike, r)
+			cp, score, ok, activeScored := e.bestScoringCounterparty(p, histories, lookalike, ap, as)
+			scored += activeScored
+			if !ok {
+				continue
+			}
+			if !best.Found || score.Total > best.Score.Total || (score.Total == best.Score.Total && cp.LastSeen.After(bestLastSeen)) {
+				best = ScoreResult{
+					TxHash:           p.Hash,
+					Victim:           victim,
+					Lookalike:        lookalike,
+					MatchedRecipient: r,
+					ObservedAt:       p.ObservedAt,
+					MatchedPrefix:    ap,
+					MatchedSuffix:    as,
+					Score:            score,
+					Found:            true,
+				}
+				bestLastSeen = cp.LastSeen
+			}
+		}
+		perf = append(perf, PerfRecord{
+			TxHash:           p.Hash,
+			Victim:           victim,
+			LookupLatencyMs:  time.Since(started).Seconds() * 1000,
+			CandidatesScored: scored,
+		})
+		totalScored += scored
+	}
+	best.CandidatesScored = totalScored
+	return best, perf
+}
+
+type displayCandidateFunc func(victim string, idx *victimIndex, lookalike string) map[string]struct{}
+
+func (e *Engine) detectByDisplayCandidateFunc(p PendingTx, candidateFn displayCandidateFunc) ([]Alert, []PerfRecord) {
+	started := time.Now()
+	alerts := make([]Alert, 0)
+	perf := make([]PerfRecord, 0)
+
+	from, err1 := NormalizeAddress(p.From)
+	to, err2 := NormalizeAddress(p.To)
+	if err1 != nil || err2 != nil {
+		return alerts, perf
+	}
+
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	candidates := [][2]string{}
+	if _, ok := e.victims[from]; ok {
+		candidates = append(candidates, [2]string{from, to})
+	}
+	if _, ok := e.victims[to]; ok {
+		candidates = append(candidates, [2]string{to, from})
+	}
+
+	for _, c := range candidates {
+		victim := c[0]
+		lookalike := c[1]
+		idx := e.indices[victim]
+		if idx == nil {
+			continue
+		}
+		candidateIDs := candidateFn(victim, idx, lookalike)
+
+		scored := 0
+		for r := range candidateIDs {
+			if r == lookalike {
+				continue
+			}
+			histories := idx.Recipients[r]
+			ap := prefixMatchNibbles(lookalike, r)
+			as := suffixMatchNibbles(lookalike, r)
+			cp, score, ok, activeScored := e.bestScoringCounterparty(p, histories, lookalike, ap, as)
+			scored += activeScored
+			if ok && score.Total >= e.cfg.Tau {
+				alerts = append(alerts, Alert{
+					TxHash:           p.Hash,
+					Victim:           victim,
+					Lookalike:        lookalike,
+					MatchedRecipient: r,
+					ObservedAt:       p.ObservedAt,
+					MatchedPrefix:    ap,
+					MatchedSuffix:    as,
+					Score:            score,
+					Reason:           explainReason(ap, as, score, cp, p),
+				})
+			}
+		}
+		perf = append(perf, PerfRecord{
+			TxHash:           p.Hash,
+			Victim:           victim,
+			LookupLatencyMs:  time.Since(started).Seconds() * 1000,
+			CandidatesScored: scored,
+		})
+	}
+	return alerts, perf
+}
+
+func (e *Engine) maxScoreByDisplayCandidateFunc(p PendingTx, candidateFn displayCandidateFunc) (ScoreResult, []PerfRecord) {
+	started := time.Now()
+	best := ScoreResult{
+		TxHash:     p.Hash,
+		ObservedAt: p.ObservedAt,
+	}
+	perf := make([]PerfRecord, 0)
+
+	from, err1 := NormalizeAddress(p.From)
+	to, err2 := NormalizeAddress(p.To)
+	if err1 != nil || err2 != nil {
+		return best, perf
+	}
+
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	candidates := [][2]string{}
+	if _, ok := e.victims[from]; ok {
+		candidates = append(candidates, [2]string{from, to})
+	}
+	if _, ok := e.victims[to]; ok {
+		candidates = append(candidates, [2]string{to, from})
+	}
+
+	bestLastSeen := time.Time{}
+	totalScored := 0
+	for _, c := range candidates {
+		victim := c[0]
+		lookalike := c[1]
+		idx := e.indices[victim]
+		if idx == nil {
+			continue
+		}
+		candidateIDs := candidateFn(victim, idx, lookalike)
 
 		scored := 0
 		for r := range candidateIDs {

@@ -29,6 +29,7 @@ type Service struct {
 	rpc    *rpc.Client
 	st     *store.Store
 	engine *detector.Engine
+	notify *telegramNotifier
 	alerts []detector.Alert
 	status Status
 
@@ -46,6 +47,7 @@ func NewService(cfg config.AppConfig, st *store.Store) (*Service, error) {
 		rpc:    rpc.NewClient(cfg.DRPC.HTTPURL, cfg.DRPC.WSSURL, cfg.DRPC.Key),
 		st:     st,
 		engine: eng,
+		notify: newTelegramNotifierFromEnv(),
 		alerts: make([]detector.Alert, 0, cfg.MaxAlertsInMemory),
 	}, nil
 }
@@ -70,10 +72,22 @@ func buildEngineFromFile(cfg config.AppConfig) (*detector.Engine, error) {
 		MaxCandidatesPerSide: cfg.Detector.MaxCandidatesPerSide,
 		Tau:                  cfg.Detector.Tau,
 		Lambda:               cfg.Detector.Lambda,
+		ScoreMode:            cfg.Detector.ScoreMode,
+		LogisticIntercept:    cfg.Detector.LogisticIntercept,
+		AddressScoreMode:     cfg.Detector.AddressScoreMode,
+		AddressBalanceAlpha:  cfg.Detector.AddressBalanceAlpha,
+		AddressBalanceGamma:  cfg.Detector.AddressBalanceGamma,
+		ContextGateBase:      cfg.Detector.ContextGateBase,
 		TinyValue:            cfg.Detector.TinyValue,
 	}
 	if len(cfg.Detector.Weights) == 5 {
 		copy(dcfg.Weights[:], cfg.Detector.Weights)
+	}
+	if len(cfg.Detector.ContextWeights) == 4 {
+		copy(dcfg.ContextWeights[:], cfg.Detector.ContextWeights)
+	}
+	if len(cfg.Detector.LogisticWeights) == 3 {
+		copy(dcfg.LogisticWeights[:], cfg.Detector.LogisticWeights)
 	}
 	eng := detector.NewEngine(dcfg)
 	if err := eng.LoadCounterparties(cps); err != nil {
@@ -157,22 +171,7 @@ func (s *Service) processPendingRaw(ctx context.Context, raw json.RawMessage, su
 		tx = fetched
 	}
 
-	pending := detector.PendingTx{
-		Hash:       tx.Hash,
-		From:       tx.From,
-		To:         tx.To,
-		ObservedAt: time.Now().UTC(),
-		Value:      rpc.HexToFloat(tx.Value),
-	}
-	if call, ok := rpc.ParseERC20TransferCall(tx.Input); ok {
-		pending.TokenAddress = tx.To
-		if call.From != "" {
-			pending.From = call.From
-		}
-		pending.To = call.To
-		pending.Value = call.Value
-		pending.ValueRaw = call.Value
-	}
+	pending, _, _ := pendingFromRPCTransaction(tx, time.Now().UTC())
 
 	alerts, _ := s.engine.Detect(pending)
 	if len(alerts) == 0 {
@@ -198,6 +197,13 @@ func (s *Service) processPendingRaw(ctx context.Context, raw json.RawMessage, su
 		s.alerts = s.alerts[:s.cfg.MaxAlertsInMemory]
 	}
 	s.mu.Unlock()
+
+	if s.notify != nil {
+		alertsToSend := append([]detector.Alert(nil), alerts...)
+		go func() {
+			_ = s.notify.NotifyAlerts(context.Background(), alertsToSend)
+		}()
+	}
 }
 
 func (s *Service) Stop() {

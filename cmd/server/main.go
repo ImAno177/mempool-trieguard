@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"log"
 	"net/http"
@@ -19,6 +20,8 @@ import (
 
 func main() {
 	cfgPath := flag.String("config", "configs/app.yaml", "path to app yaml")
+	liveBenchmarkDuration := flag.Duration("live-benchmark-duration", 0, "run a headless live mempool micro-benchmark for this duration, then exit")
+	liveBenchmarkOut := flag.String("live-benchmark-out", "", "output directory for headless live mempool micro-benchmark artifacts")
 	flag.Parse()
 
 	if _, err := os.Stat(*cfgPath); os.IsNotExist(err) {
@@ -42,6 +45,17 @@ func main() {
 		log.Fatalf("open store: %v", err)
 	}
 	defer st.Close()
+
+	if *liveBenchmarkDuration > 0 {
+		log.Printf("running live mempool micro-benchmark for %s", liveBenchmarkDuration.String())
+		summary, err := live.RunMicroBenchmark(context.Background(), cfg, st, *liveBenchmarkDuration, *liveBenchmarkOut)
+		if err != nil {
+			log.Fatalf("live micro-benchmark failed: %v", err)
+		}
+		b, _ := json.MarshalIndent(summary, "", "  ")
+		log.Printf("live micro-benchmark complete:\n%s", string(b))
+		return
+	}
 
 	liveSvc, err := live.NewService(cfg, st)
 	if err != nil {

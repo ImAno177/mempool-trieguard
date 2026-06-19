@@ -10,6 +10,7 @@ results/
 
 # Build outputs
 bin/
+dist/
 *.exe
 *.dll
 *.so
@@ -48,3 +49,7 @@ Thumbs.db
 
 # Manuscript drafts are kept local, not published in the code repo
 paper/
+final_report/
+papers_output/
+review/
+discuss.md

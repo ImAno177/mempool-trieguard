@@ -1,6 +1,7 @@
 package detector
 
 import (
+	"math"
 	"testing"
 	"time"
 )
@@ -195,6 +196,75 @@ func TestCounterfeitTokenMetadataRaisesTokenScore(t *testing.T) {
 	}
 }
 
+func TestContextGateUsesConditionedTime(t *testing.T) {
+	now := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+	cfg := Config{
+		KP:              6,
+		KS:              6,
+		Lambda:          3600,
+		TinyValue:       10,
+		ScoreMode:       "context_gate",
+		ContextGateBase: 0.80,
+		ContextWeights:  [4]float64{0, 0, 0, 1},
+	}
+	pending := PendingTx{
+		Hash:         "0xconditionedtime",
+		From:         "0x1111111111111111111111111111111111111111",
+		To:           "0xaaaa99999999999999999999999999999999bbbb",
+		TokenAddress: "0x3333333333333333333333333333333333333333",
+		Value:        0,
+		ObservedAt:   now,
+	}
+	recent := Counterparty{
+		Victim:    "0x1111111111111111111111111111111111111111",
+		Recipient: "0xaaaa00000000000000000000000000000000bbbb",
+		Token:     "0x2222222222222222222222222222222222222222",
+		LastSeen:  now.Add(-time.Minute),
+	}
+	old := recent
+	old.LastSeen = now.Add(-24 * time.Hour)
+
+	recentScore := computeScore(cfg, nil, pending, recent, "aaaa99999999999999999999999999999999bbbb", 4, 4)
+	oldScore := computeScore(cfg, nil, pending, old, "aaaa99999999999999999999999999999999bbbb", 4, 4)
+	if recentScore.Total <= oldScore.Total {
+		t.Fatalf("expected conditioned recency to raise score: recent=%.6f old=%.6f", recentScore.Total, oldScore.Total)
+	}
+	if recentScore.Total > recentScore.Address {
+		t.Fatalf("context gate must not exceed address score: total=%.6f addr=%.6f", recentScore.Total, recentScore.Address)
+	}
+}
+
+func TestAddressScoreModesUseOnlyTheirDeclaredEvidence(t *testing.T) {
+	cfg := Config{
+		KP:                  6,
+		KS:                  6,
+		AddressBalanceAlpha: 0.50,
+		AddressBalanceGamma: 1.0,
+	}
+	raw := float64(4+1) / float64(cfg.KP+cfg.KS)
+
+	cfg.AddressScoreMode = "prefix_only"
+	prefix := addressEvidenceScore(cfg, raw, 4, 1)
+	if math.Abs(prefix-(4.0/6.0)) > 1e-9 {
+		t.Fatalf("prefix_only score=%.12f, want %.12f", prefix, 4.0/6.0)
+	}
+
+	cfg.AddressScoreMode = "suffix_only"
+	suffix := addressEvidenceScore(cfg, raw, 4, 1)
+	if math.Abs(suffix-(1.0/6.0)) > 1e-9 {
+		t.Fatalf("suffix_only score=%.12f, want %.12f", suffix, 1.0/6.0)
+	}
+
+	cfg.AddressScoreMode = "balanced"
+	balanced := addressEvidenceScore(cfg, raw, 4, 1)
+	if balanced >= raw {
+		t.Fatalf("balanced score should penalize one-sided evidence: balanced=%.12f raw=%.12f", balanced, raw)
+	}
+	if balanced <= suffix || balanced >= prefix {
+		t.Fatalf("balanced score=%.12f should remain between suffix=%.12f and prefix=%.12f", balanced, suffix, prefix)
+	}
+}
+
 func TestTrieAndLinearAgreeOnAlerts(t *testing.T) {
 	cfg := Config{
 		KP:        4,
@@ -362,6 +432,185 @@ func TestDetectDoesNotAlertExactTrustedRecipient(t *testing.T) {
 	linearAlerts, _ := eng.DetectLinear(pending)
 	if len(linearAlerts) != 0 {
 		t.Fatalf("linear exact trusted recipient should not alert, got %d alerts", len(linearAlerts))
+	}
+}
+
+func TestDisplayAddressVectorUsesPrefixSuffixOneHot(t *testing.T) {
+	vec, ok := displayAddressVector("0xabcdef0000000000000000000000000000123456")
+	if !ok {
+		t.Fatalf("display vectorization failed")
+	}
+	ones := 0
+	for _, value := range vec {
+		if value == 1 {
+			ones++
+		} else if value != 0 {
+			t.Fatalf("display vector should be one-hot, got value %.3f", value)
+		}
+	}
+	if ones != displayVectorPositions {
+		t.Fatalf("expected %d one-hot entries, got %d", displayVectorPositions, ones)
+	}
+	code, ok := displayCodeFromAddress("0xabcdef0000000000000000000000000000123456")
+	if !ok {
+		t.Fatalf("display code failed")
+	}
+	if code[0] != 10 || code[1] != 11 || code[2] != 12 || code[displayVectorPositions-1] != 6 {
+		t.Fatalf("unexpected display code: %v", code)
+	}
+	if projectDisplayCode(code, 0, 0) != projectDisplayCode(code, 0, 0) {
+		t.Fatalf("projection must be deterministic")
+	}
+}
+
+func TestPaperBaselinesFindDisplayLookalike(t *testing.T) {
+	cfg := Config{
+		WindowDays:           30,
+		KP:                   6,
+		KS:                   6,
+		MinPrefixDepth:       3,
+		MinSuffixDepth:       3,
+		MaxCandidatesPerSide: 8,
+		Tau:                  0.50,
+		Lambda:               3600,
+		Weights:              [5]float64{0.25, 0.25, 0.2, 0.2, 0.1},
+		TinyValue:            10,
+	}
+	now := time.Now().UTC()
+	eng := NewEngine(cfg)
+	if err := eng.LoadCounterparties([]Counterparty{
+		{
+			Victim:       "0x1111111111111111111111111111111111111111",
+			Recipient:    "0xaaaaaa0000000000000000000000000000bbbbbb",
+			Token:        "0x2222222222222222222222222222222222222222",
+			LastSeen:     now.Add(-5 * time.Minute),
+			ObservedFreq: 3,
+		},
+		{
+			Victim:       "0x1111111111111111111111111111111111111111",
+			Recipient:    "0x1234560000000000000000000000000000fedcba",
+			Token:        "0x2222222222222222222222222222222222222222",
+			LastSeen:     now.Add(-10 * time.Minute),
+			ObservedFreq: 1,
+		},
+	}); err != nil {
+		t.Fatalf("load cps failed: %v", err)
+	}
+	eng.PrebuildDisplayIndexes(true)
+	if err := eng.PrebuildDBIndex(); err != nil {
+		t.Fatalf("prebuild db index failed: %v", err)
+	}
+
+	pending := PendingTx{
+		Hash:         "0xpaperbaseline",
+		From:         "0x1111111111111111111111111111111111111111",
+		To:           "0xaaaaaa9999999999999999999999999999bbbbbb",
+		TokenAddress: "0x3333333333333333333333333333333333333333",
+		Value:        0,
+		ObservedAt:   now,
+	}
+	for name, detect := range map[string]func(PendingTx) ([]Alert, []PerfRecord){
+		"db_index":        eng.DetectDBIndex,
+		"dblsh2_display":  eng.DetectDBLSHDisplay,
+		"lsh_apg_display": eng.DetectLSHAPGDisplay,
+	} {
+		t.Run(name, func(t *testing.T) {
+			alerts, perf := detect(pending)
+			if len(alerts) == 0 {
+				t.Fatalf("expected paper baseline alert")
+			}
+			if alerts[0].MatchedRecipient != "aaaaaa0000000000000000000000000000bbbbbb" {
+				t.Fatalf("unexpected matched recipient: %s", alerts[0].MatchedRecipient)
+			}
+			if len(perf) == 0 || perf[0].CandidatesScored == 0 {
+				t.Fatalf("expected candidates to be scored")
+			}
+		})
+	}
+}
+
+func TestPaperBaselinesRespectExactMatchAndTimeWindow(t *testing.T) {
+	cfg := Config{
+		WindowDays:           30,
+		KP:                   6,
+		KS:                   6,
+		MaxCandidatesPerSide: 8,
+		Tau:                  0.25,
+		Lambda:               3600,
+		Weights:              [5]float64{0.3, 0.2, 0.2, 0.15, 0.15},
+		TinyValue:            10,
+	}
+	now := time.Date(2026, 6, 14, 9, 0, 0, 0, time.UTC)
+	baseCP := Counterparty{
+		Victim:       "0x1111111111111111111111111111111111111111",
+		Recipient:    "0xaaaaaa0000000000000000000000000000bbbbbb",
+		Token:        "0x2222222222222222222222222222222222222222",
+		ObservedFreq: 1,
+	}
+
+	cases := []struct {
+		name     string
+		lastSeen time.Time
+		to       string
+		wantHit  bool
+	}{
+		{
+			name:     "exact_recipient_suppressed",
+			lastSeen: now.Add(-time.Hour),
+			to:       "0xaaaaaa0000000000000000000000000000bbbbbb",
+			wantHit:  false,
+		},
+		{
+			name:     "future_history_rejected",
+			lastSeen: now.Add(time.Hour),
+			to:       "0xaaaaaa9999999999999999999999999999bbbbbb",
+			wantHit:  false,
+		},
+		{
+			name:     "expired_history_rejected",
+			lastSeen: now.Add(-31 * 24 * time.Hour),
+			to:       "0xaaaaaa9999999999999999999999999999bbbbbb",
+			wantHit:  false,
+		},
+		{
+			name:     "active_history_alerts",
+			lastSeen: now.Add(-time.Hour),
+			to:       "0xaaaaaa9999999999999999999999999999bbbbbb",
+			wantHit:  true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			eng := NewEngine(cfg)
+			cp := baseCP
+			cp.LastSeen = tc.lastSeen
+			if err := eng.LoadCounterparties([]Counterparty{cp}); err != nil {
+				t.Fatalf("load cps failed: %v", err)
+			}
+			eng.PrebuildDisplayIndexes(true)
+			if err := eng.PrebuildDBIndex(); err != nil {
+				t.Fatalf("prebuild db index failed: %v", err)
+			}
+			pending := PendingTx{
+				Hash:         "0xpaperwindow",
+				From:         "0x1111111111111111111111111111111111111111",
+				To:           tc.to,
+				TokenAddress: "0x3333333333333333333333333333333333333333",
+				Value:        0,
+				ObservedAt:   now,
+			}
+			for name, detect := range map[string]func(PendingTx) ([]Alert, []PerfRecord){
+				"db_index":        eng.DetectDBIndex,
+				"dblsh2_display":  eng.DetectDBLSHDisplay,
+				"lsh_apg_display": eng.DetectLSHAPGDisplay,
+			} {
+				alerts, _ := detect(pending)
+				gotHit := len(alerts) > 0
+				if gotHit != tc.wantHit {
+					t.Fatalf("%s alert=%v, want %v", name, gotHit, tc.wantHit)
+				}
+			}
+		})
 	}
 }
 

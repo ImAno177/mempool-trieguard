@@ -213,6 +213,12 @@ func extractDetectorConfig(yml []byte, base config.AppConfig) (config.DetectorCo
 			if len(full.Detector.Weights) == 0 {
 				out.Weights = base.Detector.Weights
 			}
+			if len(full.Detector.ContextWeights) == 0 {
+				out.ContextWeights = base.Detector.ContextWeights
+			}
+			if len(full.Detector.LogisticWeights) == 0 {
+				out.LogisticWeights = base.Detector.LogisticWeights
+			}
 			fillDetectorDefaults(&out, base.Detector)
 			return out, nil
 		}
@@ -224,6 +230,12 @@ func extractDetectorConfig(yml []byte, base config.AppConfig) (config.DetectorCo
 			out = direct
 			if len(direct.Weights) == 0 {
 				out.Weights = base.Detector.Weights
+			}
+			if len(direct.ContextWeights) == 0 {
+				out.ContextWeights = base.Detector.ContextWeights
+			}
+			if len(direct.LogisticWeights) == 0 {
+				out.LogisticWeights = base.Detector.LogisticWeights
 			}
 			fillDetectorDefaults(&out, base.Detector)
 			return out, nil
@@ -241,6 +253,24 @@ func fillDetectorDefaults(dst *config.DetectorConfig, base config.DetectorConfig
 	}
 	if dst.MaxCandidatesPerSide <= 0 {
 		dst.MaxCandidatesPerSide = base.MaxCandidatesPerSide
+	}
+	if dst.ScoreMode == "" {
+		dst.ScoreMode = base.ScoreMode
+	}
+	if dst.LogisticIntercept == 0 {
+		dst.LogisticIntercept = base.LogisticIntercept
+	}
+	if dst.AddressScoreMode == "" {
+		dst.AddressScoreMode = base.AddressScoreMode
+	}
+	if dst.AddressBalanceAlpha == 0 {
+		dst.AddressBalanceAlpha = base.AddressBalanceAlpha
+	}
+	if dst.AddressBalanceGamma == 0 {
+		dst.AddressBalanceGamma = base.AddressBalanceGamma
+	}
+	if dst.ContextGateBase <= 0 {
+		dst.ContextGateBase = base.ContextGateBase
 	}
 }
 

@@ -1,6 +1,9 @@
 package rpc
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestParseERC20TransferCallTransfer(t *testing.T) {
 	input := "0xa9059cbb" +
@@ -41,5 +44,15 @@ func TestParseERC20TransferCallTransferFrom(t *testing.T) {
 	}
 	if call.Value != 500 {
 		t.Fatalf("value=%f", call.Value)
+	}
+}
+
+func TestSubscriptionDropCounter(t *testing.T) {
+	sub := &Subscription{RawMessages: make(chan json.RawMessage)}
+	if sub.enqueueRawMessage(json.RawMessage(`"0xabc"`)) {
+		t.Fatalf("enqueue should drop when channel has no receiver")
+	}
+	if got := sub.DroppedCount(); got != 1 {
+		t.Fatalf("dropped count = %d, want 1", got)
 	}
 }
