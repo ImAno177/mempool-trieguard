@@ -19,7 +19,12 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 curl -fsSL "$base_url/$ASSET_NAME" -o "$tmp_dir/server"
 if curl -fsSL "$base_url/$ASSET_NAME.sha256" -o "$tmp_dir/server.sha256"; then
-  (cd "$tmp_dir" && sha256sum -c server.sha256)
+  expected="$(awk '{print $1}' "$tmp_dir/server.sha256")"
+  actual="$(sha256sum "$tmp_dir/server" | awk '{print $1}')"
+  if [[ "$expected" != "$actual" ]]; then
+    echo "Checksum mismatch for $ASSET_NAME" >&2
+    exit 1
+  fi
 fi
 
 install -m 0755 "$tmp_dir/server" "$INSTALL_DIR/server"

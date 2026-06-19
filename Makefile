@@ -23,7 +23,7 @@ build:
 build-linux:
 	mkdir -p $(DIST_DIR)
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 $(GO) build -trimpath -ldflags="-s -w" -o $(SERVER_LINUX) ./cmd/server
-	sha256sum $(SERVER_LINUX) > $(SERVER_LINUX).sha256
+	cd $(DIST_DIR) && sha256sum server-linux-amd64 > server-linux-amd64.sha256
 
 clean:
 	rm -rf $(DIST_DIR)
