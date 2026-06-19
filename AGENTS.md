@@ -21,7 +21,7 @@ make verify
 make build-linux
 ```
 
-Run the local server:
+Run the local JSON control server:
 
 ```powershell
 go run ./cmd/server --config configs\app.yaml

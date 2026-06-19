@@ -6,7 +6,7 @@ Mempool-TrieGuard is a Go and Python research prototype for pre-confirmation Eth
 
 | Path | Purpose |
 |---|---|
-| `cmd/server` | Web UI, live detector, and live microbenchmark entrypoint. |
+| `cmd/server` | JSON control server and live microbenchmark entrypoint. |
 | `cmd/detector-cli` | Replay benchmark CLI used by the Python pipeline. |
 | `internal/detector` | Trie retrieval, baselines, scoring, and detector tests. |
 | `internal/live` | dRPC pending-feed benchmark and live artifact writer. |

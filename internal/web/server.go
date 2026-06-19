@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"io"
 	"log"
 	"net/http"
@@ -27,20 +26,6 @@ type Server struct {
 	st        *store.Store
 	liveSvc   *live.Service
 	rpcClient *rpc.Client
-	tmpl      *template.Template
-}
-
-type viewData struct {
-	Now      time.Time
-	Config   config.AppConfig
-	Status   live.Status
-	Alerts   interface{}
-	Runs     interface{}
-	Configs  interface{}
-	Datasets []datasetEntry
-	Message  string
-	BlockNo  uint64
-	SmokeErr string
 }
 
 type datasetEntry struct {
@@ -50,11 +35,7 @@ type datasetEntry struct {
 }
 
 func NewServer(cfg config.AppConfig, st *store.Store, liveSvc *live.Service) (*Server, error) {
-	tmpl, err := template.ParseGlob(filepath.Join("web", "templates", "*.html"))
-	if err != nil {
-		return nil, err
-	}
-	return &Server{cfg: cfg, st: st, liveSvc: liveSvc, rpcClient: rpc.NewClient(cfg.DRPC.HTTPURL, cfg.DRPC.WSSURL, cfg.DRPC.Key), tmpl: tmpl}, nil
+	return &Server{cfg: cfg, st: st, liveSvc: liveSvc, rpcClient: rpc.NewClient(cfg.DRPC.HTTPURL, cfg.DRPC.WSSURL, cfg.DRPC.Key)}, nil
 }
 
 func (s *Server) Handler() http.Handler {
@@ -87,8 +68,12 @@ func (s *Server) basicAuth(next http.Handler) http.Handler {
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	status := s.liveSvc.Status()
 	alerts := s.liveSvc.Alerts(20)
-	data := viewData{Now: time.Now(), Config: s.cfg, Status: status, Alerts: alerts}
-	s.render(w, "dashboard.html", data)
+	writeJSON(w, map[string]interface{}{
+		"now":    time.Now().UTC(),
+		"config": s.cfg,
+		"status": status,
+		"alerts": alerts,
+	})
 }
 
 func (s *Server) handleDatasets(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +86,10 @@ func (s *Server) handleDatasets(w http.ResponseWriter, r *http.Request) {
 		entries = append(entries, datasetEntry{Name: info.Name(), Path: path, Size: info.Size()})
 		return nil
 	})
-	s.render(w, "datasets.html", viewData{Now: time.Now(), Config: s.cfg, Datasets: entries})
+	writeJSON(w, map[string]interface{}{
+		"now":      time.Now().UTC(),
+		"datasets": entries,
+	})
 }
 
 func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +101,10 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {
 	if len(runs) == 0 {
 		runs = append(runs, s.collectRunsFromResults()...)
 	}
-	s.render(w, "runs.html", viewData{Now: time.Now(), Config: s.cfg, Runs: runs})
+	writeJSON(w, map[string]interface{}{
+		"now":  time.Now().UTC(),
+		"runs": runs,
+	})
 }
 
 func (s *Server) handleLiveStart(w http.ResponseWriter, r *http.Request) {
@@ -125,7 +116,7 @@ func (s *Server) handleLiveStart(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	writeJSON(w, map[string]interface{}{"ok": true, "status": s.liveSvc.Status()})
 }
 
 func (s *Server) handleLiveStop(w http.ResponseWriter, r *http.Request) {
@@ -134,7 +125,7 @@ func (s *Server) handleLiveStop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.liveSvc.Stop()
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	writeJSON(w, map[string]interface{}{"ok": true, "status": s.liveSvc.Status()})
 }
 
 func (s *Server) handleLiveStatus(w http.ResponseWriter, r *http.Request) {
@@ -151,7 +142,11 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.render(w, "config.html", viewData{Now: time.Now(), Config: s.cfg, Configs: cfgs})
+	writeJSON(w, map[string]interface{}{
+		"now":             time.Now().UTC(),
+		"current_config":  s.cfg,
+		"config_versions": cfgs,
+	})
 }
 
 func (s *Server) handleConfigImport(w http.ResponseWriter, r *http.Request) {
@@ -187,7 +182,7 @@ func (s *Server) handleConfigImport(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.st.SaveConfigVersion(operator, "import-best-config", string(body), true); err != nil {
 		log.Printf("save config version failed: %v", err)
 	}
-	http.Redirect(w, r, "/config", http.StatusSeeOther)
+	writeJSON(w, map[string]interface{}{"ok": true, "detector": dcfg})
 }
 
 func (s *Server) handleSmoke(w http.ResponseWriter, r *http.Request) {
@@ -277,12 +272,6 @@ func fillDetectorDefaults(dst *config.DetectorConfig, base config.DetectorConfig
 func writeJSON(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
-}
-
-func (s *Server) render(w http.ResponseWriter, name string, data viewData) {
-	if err := s.tmpl.ExecuteTemplate(w, name, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
 }
 
 func (s *Server) collectRunsFromResults() []store.RunRecord {
