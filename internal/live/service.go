@@ -174,6 +174,7 @@ func (s *Service) processPendingRaw(ctx context.Context, raw json.RawMessage, su
 	pending, _, _ := pendingFromRPCTransaction(tx, time.Now().UTC())
 
 	alerts, _ := s.engine.Detect(pending)
+	detectedAt := time.Now()
 	if len(alerts) == 0 {
 		s.mu.Lock()
 		s.status.TotalMessages++
@@ -201,7 +202,7 @@ func (s *Service) processPendingRaw(ctx context.Context, raw json.RawMessage, su
 	if s.notify != nil {
 		alertsToSend := append([]detector.Alert(nil), alerts...)
 		go func() {
-			_ = s.notify.NotifyAlerts(context.Background(), alertsToSend)
+			_ = s.notify.NotifyAlerts(context.Background(), alertsToSend, detectedAt)
 		}()
 	}
 }

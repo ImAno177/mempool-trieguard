@@ -130,19 +130,20 @@ Build a recent active protected-account file first. The helper scans recent full
 
 ```powershell
 python scripts\build_active_protected_accounts.py `
-  --lookback-blocks 1800 `
+  --lookback-blocks 7200 `
   --batch-size 3 `
-  --max-victims 50 `
-  --min-counterparties 10 `
-  --max-counterparties-per-victim 200 `
-  --max-rows 10000 `
-  --metadata-limit 150 `
+  --max-victims 1000 `
+  --min-counterparties 5 `
+  --max-counterparties-per-victim 100 `
+  --max-rows 100000 `
+  --metadata-limit 400 `
+  --contract-probe-limit 3000 `
   --sleep-ms 25 `
-  --out results\live_active_protected_accounts_6h_50victims.json
+  --out results\live_active_protected_accounts_24h_1000victims.json
 ```
 
 ```powershell
-$env:APP_PROTECTED_ACCOUNTS_PATH="results\live_active_protected_accounts_6h_50victims.json"
+$env:APP_PROTECTED_ACCOUNTS_PATH="results\live_active_protected_accounts_24h_1000victims.json"
 $env:DRPC_HTTP_URL="https://lb.drpc.live/ethereum/<YOUR_KEY>"
 $env:DRPC_WSS_URL="wss://lb.drpc.live/ethereum/<YOUR_KEY>"
 $env:DRPC_KEY="<YOUR_KEY>"
@@ -158,13 +159,13 @@ Artifacts:
 - `run_manifest.json`: provider host, VPS/region hint if set, Go/runtime metadata, git revision when available, config hash, and protected-account file hash.
 - `live_mempool_events.csv`: per pending-message fetch, decode, detector, lookup, inter-arrival, sender/nonce, fee, candidate, replacement, and alert timings.
 - `live_mempool_blocks.csv`: one post-warmup row per included block with how many included transactions were observed first in the pending feed.
-- `live_mempool_alerts.jsonl`: alert records emitted during the run.
+- `live_mempool_alerts.jsonl`: one row per emitted alert, including Telegram `sendMessage` receipt metadata when configured (`message_id`, API `date`, local send latency, detector-to-Telegram acceptance proxy, and pending-to-Telegram acceptance proxy).
 
 The benchmark excludes the first 60 seconds or first 5 observed blocks, whichever is longer. Treat the visibility fields as valid only when `visibility_valid=true`, which requires warmup completion, at least 100 post-warmup blocks, and `subscription_dropped_messages=0`.
 
-For the VPS supplement in this checkout, run a 2-minute smoke test, wait a few minutes to avoid provider subscription rate limits, then run one continuous 6-hour collection with 50 protected victims. A 48-hour collection is still acceptable if quota and review time allow. The collector retains pending-hash and sender/nonce state for 6 hours to bound memory, flushes CSV artifacts every 30 seconds, and records WebSocket reconnects in `subscription_reconnects` and `subscription_ids`.
+For the VPS supplement in this checkout, run a 2-minute smoke test, wait a few minutes to avoid provider subscription rate limits, then run one continuous 6-hour collection with the 1000-victim recent protected-account file above. The smaller 50-victim file is useful for manual auditability, but it is usually too sparse to observe real live alerts in a short window. A 48-hour collection is still acceptable if quota and review time allow. The collector retains pending-hash and sender/nonce state for 6 hours to bound memory, flushes CSV artifacts every 30 seconds, and records WebSocket reconnects in `subscription_reconnects` and `subscription_ids`.
 
-For the paper, report detector latency separately from provider enrichment latency. The visibility-loss proxy is `1 - included_seen_pending_rate` for all included transactions, and `1 - included_erc20_seen_pending_rate` for ERC-20 transfer-call transactions seen in counted blocks. This is provider-specific public-feed visibility, not global Ethereum mempool ground truth, and it does not produce live precision/recall labels.
+For the paper, report detector latency separately from provider enrichment latency. Telegram alert timing should be reported as a Bot API acceptance proxy: `sendMessage` HTTP round-trip plus Telegram `message_id`/server `date`; the Bot API does not expose end-user device notification or read-receipt timing. The visibility-loss proxy is `1 - included_seen_pending_rate` for all included transactions, and `1 - included_erc20_seen_pending_rate` for ERC-20 transfer-call transactions seen in counted blocks. This is provider-specific public-feed visibility, not global Ethereum mempool ground truth, and it does not produce live precision/recall labels.
 
 ### 6. Release binary and pull from VPS
 

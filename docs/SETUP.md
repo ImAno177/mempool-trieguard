@@ -135,15 +135,16 @@ For a live run, prefer a protected-account file built from recent direct ERC-20 
 
 ```powershell
 python scripts\build_active_protected_accounts.py `
-  --lookback-blocks 1800 `
+  --lookback-blocks 7200 `
   --batch-size 3 `
-  --max-victims 50 `
-  --min-counterparties 10 `
-  --max-counterparties-per-victim 200 `
-  --max-rows 10000 `
-  --metadata-limit 150 `
+  --max-victims 1000 `
+  --min-counterparties 5 `
+  --max-counterparties-per-victim 100 `
+  --max-rows 100000 `
+  --metadata-limit 400 `
+  --contract-probe-limit 3000 `
   --sleep-ms 25 `
-  --out results\live_active_protected_accounts_6h_50victims.json
+  --out results\live_active_protected_accounts_24h_1000victims.json
 ```
 
 dRPC's current free-tier documentation lists 210M CU per 30 days, a usual `120,000` CU/min/IP limit, possible regional reduction to `50,400` CU/min, and a JSON-RPC batch cap of `3` items. Keep `--batch-size 3` or lower on free tier, and avoid repeated smoke subscriptions in a tight loop.
@@ -154,7 +155,7 @@ Prepare environment variables on the VPS:
 $env:DRPC_HTTP_URL="https://lb.drpc.live/ethereum/<YOUR_KEY>"
 $env:DRPC_WSS_URL="wss://lb.drpc.live/ethereum/<YOUR_KEY>"
 $env:DRPC_KEY="<YOUR_KEY>"
-$env:APP_PROTECTED_ACCOUNTS_PATH="results\live_active_protected_accounts_6h_50victims.json"
+$env:APP_PROTECTED_ACCOUNTS_PATH="results\live_active_protected_accounts_24h_1000victims.json"
 ```
 
 Run one 6-hour collection:
@@ -171,7 +172,7 @@ Linux/VPS shell equivalent:
 export DRPC_HTTP_URL="https://lb.drpc.live/ethereum/<YOUR_KEY>"
 export DRPC_WSS_URL="wss://lb.drpc.live/ethereum/<YOUR_KEY>"
 export DRPC_KEY="<YOUR_KEY>"
-export APP_PROTECTED_ACCOUNTS_PATH="results/live_active_protected_accounts_6h_50victims.json"
+export APP_PROTECTED_ACCOUNTS_PATH="results/live_active_protected_accounts_24h_1000victims.json"
 
 ./server --config configs/app.yaml \
   --live-benchmark-duration 6h \
@@ -184,18 +185,18 @@ Expected artifacts:
 - `run_manifest.json` - provider host, region/VPS hint, Go/runtime metadata, git revision when available, config hash, and protected-account hash.
 - `live_mempool_events.csv` - one row per pending-feed message.
 - `live_mempool_blocks.csv` - one post-warmup row per included block.
-- `live_mempool_alerts.jsonl` - emitted alerts, if any.
+- `live_mempool_alerts.jsonl` - emitted alerts, if any, with Telegram `sendMessage` receipt metadata when Telegram is configured.
 
 Run protocol for paper artifacts:
 
 - Run one 2-minute smoke collection first to verify credentials and artifact creation, then wait a few minutes before the final run to avoid provider subscription rate limits.
-- Preferred final run for the reviewer supplement in this checkout: one continuous 6-hour VPS run with the 50-victim recent protected-account file above.
+- Preferred final run for the reviewer supplement in this checkout: one continuous 6-hour VPS run with the 1000-victim recent protected-account file above. Keep the 50-victim file only as a smaller audit/control artifact; it is usually too sparse for observing real alerts in a short window.
 - A longer 48-hour VPS run remains acceptable if quota and review time allow; report the chosen duration exactly.
 - If the 6-hour run fails, fall back to 3 independent 30-minute collections at different UTC windows and report the shorter protocol explicitly.
 - Set `LIVE_BENCHMARK_REGION` or `VPS_REGION` if you want the manifest to record the deployment region.
 - Accept a visibility run only when `visibility_valid=true`. This requires warmup completion, at least 100 post-warmup blocks, and `subscription_dropped_messages=0`.
 
-The long-run collector retains pending-hash and sender/nonce state for 6 hours to bound memory during long runs, flushes CSV artifacts every 30 seconds, and records WebSocket reconnects in `subscription_reconnects` and `subscription_ids`. Report detector latency from `detector_latency_*` and `lookup_latency_*`, including p50/p95/p99 and the `*_us` or `*_ns` fields when discussing timer resolution. Report provider/enrichment overhead separately from `fetch_latency_*`. Use `pending_messages_per_second`, `pending_interarrival_*`, and `pending_to_block_timestamp_lead_*` to compare detector latency against live feed pressure. Use `included_visibility_loss_rate` and `included_erc20_visibility_loss_rate` only as provider-specific public-pending-feed visibility-loss proxies. Do not report live precision/recall from this run, and do not equate unseen included transactions with private order flow alone.
+The long-run collector retains pending-hash and sender/nonce state for 6 hours to bound memory during long runs, flushes CSV artifacts every 30 seconds, and records WebSocket reconnects in `subscription_reconnects` and `subscription_ids`. Report detector latency from `detector_latency_*` and `lookup_latency_*`, including p50/p95/p99 and the `*_us` or `*_ns` fields when discussing timer resolution. Report provider/enrichment overhead separately from `fetch_latency_*`. Telegram alert timing is measured as a Bot API acceptance proxy using `telegram_send_latency_*`, `detector_to_telegram_accept_*`, `pending_to_telegram_accept_*`, and per-alert `message_id`/API `date` in `live_mempool_alerts.jsonl`; Telegram does not expose end-user device notification or read-receipt timing through the bot API. Use `pending_messages_per_second`, `pending_interarrival_*`, and `pending_to_block_timestamp_lead_*` to compare detector latency against live feed pressure. Use `included_visibility_loss_rate` and `included_erc20_visibility_loss_rate` only as provider-specific public-pending-feed visibility-loss proxies. Do not report live precision/recall from this run, and do not equate unseen included transactions with private order flow alone.
 
 ### VPS Pull From GitHub Release
 
@@ -213,7 +214,7 @@ curl -fsSL https://raw.githubusercontent.com/ImAno177/mempool-trieguard/main/scr
 chmod +x vps_run_live.sh
 ```
 
-Keep `.env` and `results/live_active_protected_accounts_6h_50victims.json` on the VPS, not in Git. Start the run:
+Keep `.env` and `results/live_active_protected_accounts_24h_1000victims.json` on the VPS, not in Git. Start the run:
 
 ```bash
 LIVE_BENCHMARK_DURATION=6h ./vps_run_live.sh

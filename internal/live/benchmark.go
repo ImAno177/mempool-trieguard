@@ -76,6 +76,22 @@ type MicroBenchmarkSummary struct {
 	DetectorEvents                  int64     `json:"detector_events"`
 	DetectorEventsPerSecond         float64   `json:"detector_events_per_second"`
 	DetectorAlerts                  int64     `json:"detector_alerts"`
+	TelegramConfigured              bool      `json:"telegram_configured"`
+	TelegramAlertsAttempted         int64     `json:"telegram_alerts_attempted"`
+	TelegramAlertsSent              int64     `json:"telegram_alerts_sent"`
+	TelegramAlertsFailed            int64     `json:"telegram_alerts_failed"`
+	TelegramSendLatencyMeanMs       float64   `json:"telegram_send_latency_mean_ms"`
+	TelegramSendLatencyP50Ms        float64   `json:"telegram_send_latency_p50_ms"`
+	TelegramSendLatencyP95Ms        float64   `json:"telegram_send_latency_p95_ms"`
+	TelegramSendLatencyP99Ms        float64   `json:"telegram_send_latency_p99_ms"`
+	DetectorToTelegramMeanMs        float64   `json:"detector_to_telegram_accept_mean_ms"`
+	DetectorToTelegramP50Ms         float64   `json:"detector_to_telegram_accept_p50_ms"`
+	DetectorToTelegramP95Ms         float64   `json:"detector_to_telegram_accept_p95_ms"`
+	DetectorToTelegramP99Ms         float64   `json:"detector_to_telegram_accept_p99_ms"`
+	PendingToTelegramMeanMs         float64   `json:"pending_to_telegram_accept_mean_ms"`
+	PendingToTelegramP50Ms          float64   `json:"pending_to_telegram_accept_p50_ms"`
+	PendingToTelegramP95Ms          float64   `json:"pending_to_telegram_accept_p95_ms"`
+	PendingToTelegramP99Ms          float64   `json:"pending_to_telegram_accept_p99_ms"`
 	DetectorLatencyMeanMs           float64   `json:"detector_latency_mean_ms"`
 	DetectorLatencyP50Ms            float64   `json:"detector_latency_p50_ms"`
 	DetectorLatencyP95Ms            float64   `json:"detector_latency_p95_ms"`
@@ -136,6 +152,7 @@ type microEventRow struct {
 	FetchLatencyMs        float64
 	ERC20                 bool
 	ERC20Method           string
+	DetectorCompletedAt   time.Time
 	DetectorLatencyMs     float64
 	DetectorLatencyUs     float64
 	DetectorLatencyNs     int64
@@ -172,6 +189,13 @@ type microBlockRow struct {
 	pendingToBlockLeadMs     []float64
 }
 
+type liveAlertRecord struct {
+	Alert               detector.Alert       `json:"alert"`
+	DetectorCompletedAt time.Time            `json:"detector_completed_at"`
+	DetectorLatencyMs   float64              `json:"detector_latency_ms"`
+	Telegram            *telegramSendReceipt `json:"telegram,omitempty"`
+}
+
 type runManifest struct {
 	StartedAt                  time.Time `json:"started_at"`
 	EndedAt                    time.Time `json:"ended_at"`
@@ -201,6 +225,8 @@ type runManifest struct {
 	AcceptanceMinBlocks        int       `json:"acceptance_min_blocks"`
 	VisibilityValid            bool      `json:"visibility_valid"`
 	VisibilityInvalidReason    string    `json:"visibility_invalid_reason,omitempty"`
+	TelegramConfigured         bool      `json:"telegram_configured"`
+	TelegramReceiptSemantics   string    `json:"telegram_receipt_semantics,omitempty"`
 }
 
 type senderNonceKey struct {
@@ -270,6 +296,7 @@ func RunMicroBenchmark(ctx context.Context, cfg config.AppConfig, st *store.Stor
 	writeBlockHeader(blockCSV)
 	alertEncoder := json.NewEncoder(alertsFile)
 	notifier := newTelegramNotifierFromEnv()
+	telegramConfigured := notifier != nil
 
 	started := time.Now().UTC()
 	runCtx, cancel := context.WithTimeout(ctx, duration)
@@ -284,6 +311,7 @@ func RunMicroBenchmark(ctx context.Context, cfg config.AppConfig, st *store.Stor
 		StateRetentionSeconds:        liveBenchmarkStateRetention.Seconds(),
 		ArtifactFlushIntervalSeconds: liveBenchmarkFlushInterval.Seconds(),
 		AcceptanceMinBlocks:          liveBenchmarkMinBlocks,
+		TelegramConfigured:           telegramConfigured,
 		Artifacts:                    []string{eventsPath, blocksPath, alertsPath, manifestPath},
 	}
 	seenPending := map[string]time.Time{}
@@ -296,6 +324,9 @@ func RunMicroBenchmark(ctx context.Context, cfg config.AppConfig, st *store.Stor
 	pendingInterarrivals := []float64{}
 	pendingToBlockLeadTimes := []float64{}
 	candidates := []float64{}
+	telegramSendLatencies := []float64{}
+	detectorToTelegramLatencies := []float64{}
+	pendingToTelegramLatencies := []float64{}
 	var lastPendingAt time.Time
 	var lastBlockNumber uint64
 	var allBlockOrdinal int64
@@ -314,7 +345,7 @@ func RunMicroBenchmark(ctx context.Context, cfg config.AppConfig, st *store.Stor
 			summary.ReplacementCandidateGroups = int64(len(replacementGroups))
 			summary.PendingStateRetained = int64(len(seenPending))
 			summary.SenderNonceGroupsRetained = int64(len(senderNonceFirstHash))
-			finalizeMicroSummary(&summary, fetchLatencies, detectLatencies, lookupLatencies, candidates, pendingInterarrivals, pendingToBlockLeadTimes)
+			finalizeMicroSummary(&summary, fetchLatencies, detectLatencies, lookupLatencies, candidates, pendingInterarrivals, pendingToBlockLeadTimes, telegramSendLatencies, detectorToTelegramLatencies, pendingToTelegramLatencies)
 			summaryPath := filepath.Join(outDir, "live_mempool_metrics.json")
 			summary.Artifacts = append(summary.Artifacts, summaryPath)
 			if err := flushMicroCSVs(eventCSV, blockCSV); err != nil {
@@ -429,10 +460,25 @@ func RunMicroBenchmark(ctx context.Context, cfg config.AppConfig, st *store.Stor
 					_ = st.SaveAlerts(alerts)
 				}
 				for _, alert := range alerts {
-					_ = alertEncoder.Encode(alert)
-				}
-				if notifier != nil {
-					_ = notifier.NotifyAlerts(runCtx, alerts)
+					record := liveAlertRecord{
+						Alert:               alert,
+						DetectorCompletedAt: row.DetectorCompletedAt.UTC(),
+						DetectorLatencyMs:   row.DetectorLatencyMs,
+					}
+					if notifier != nil {
+						receipt := notifier.NotifyAlert(runCtx, alert, row.DetectorCompletedAt)
+						record.Telegram = &receipt
+						summary.TelegramAlertsAttempted++
+						if receipt.OK {
+							summary.TelegramAlertsSent++
+							telegramSendLatencies = append(telegramSendLatencies, receipt.SendLatencyMs)
+							detectorToTelegramLatencies = append(detectorToTelegramLatencies, receipt.DetectorToTelegramAcceptMs)
+							pendingToTelegramLatencies = append(pendingToTelegramLatencies, receipt.PendingToTelegramAcceptMs)
+						} else {
+							summary.TelegramAlertsFailed++
+						}
+					}
+					_ = alertEncoder.Encode(record)
 				}
 			}
 		case <-blockTicker.C:
@@ -516,7 +562,9 @@ func processMicroPending(ctx context.Context, client *rpc.Client, eng *detector.
 	row.ERC20Method = method
 	started := time.Now()
 	alerts, perf := eng.Detect(pending)
-	elapsed := time.Since(started)
+	completed := time.Now()
+	elapsed := completed.Sub(started)
+	row.DetectorCompletedAt = completed
 	row.DetectorLatencyNs = elapsed.Nanoseconds()
 	row.DetectorLatencyUs = float64(row.DetectorLatencyNs) / 1000
 	row.DetectorLatencyMs = float64(row.DetectorLatencyNs) / 1_000_000
@@ -692,7 +740,7 @@ func pruneMicroState(now time.Time, seenPending map[string]time.Time, senderNonc
 	}
 }
 
-func finalizeMicroSummary(summary *MicroBenchmarkSummary, fetchLatencies, detectLatencies, lookupLatencies, candidates, pendingInterarrivals, pendingToBlockLeadTimes []float64) {
+func finalizeMicroSummary(summary *MicroBenchmarkSummary, fetchLatencies, detectLatencies, lookupLatencies, candidates, pendingInterarrivals, pendingToBlockLeadTimes, telegramSendLatencies, detectorToTelegramLatencies, pendingToTelegramLatencies []float64) {
 	if summary.DurationSeconds > 0 {
 		summary.PendingMessagesPerSecond = float64(summary.PendingMessages) / summary.DurationSeconds
 		summary.DetectorEventsPerSecond = float64(summary.DetectorEvents) / summary.DurationSeconds
@@ -706,6 +754,18 @@ func finalizeMicroSummary(summary *MicroBenchmarkSummary, fetchLatencies, detect
 	summary.FetchLatencyP50Ms = percentile(fetchLatencies, 50)
 	summary.FetchLatencyP95Ms = percentile(fetchLatencies, 95)
 	summary.FetchLatencyP99Ms = percentile(fetchLatencies, 99)
+	summary.TelegramSendLatencyMeanMs = mean(telegramSendLatencies)
+	summary.TelegramSendLatencyP50Ms = percentile(telegramSendLatencies, 50)
+	summary.TelegramSendLatencyP95Ms = percentile(telegramSendLatencies, 95)
+	summary.TelegramSendLatencyP99Ms = percentile(telegramSendLatencies, 99)
+	summary.DetectorToTelegramMeanMs = mean(detectorToTelegramLatencies)
+	summary.DetectorToTelegramP50Ms = percentile(detectorToTelegramLatencies, 50)
+	summary.DetectorToTelegramP95Ms = percentile(detectorToTelegramLatencies, 95)
+	summary.DetectorToTelegramP99Ms = percentile(detectorToTelegramLatencies, 99)
+	summary.PendingToTelegramMeanMs = mean(pendingToTelegramLatencies)
+	summary.PendingToTelegramP50Ms = percentile(pendingToTelegramLatencies, 50)
+	summary.PendingToTelegramP95Ms = percentile(pendingToTelegramLatencies, 95)
+	summary.PendingToTelegramP99Ms = percentile(pendingToTelegramLatencies, 99)
 	summary.DetectorLatencyMeanMs = mean(detectLatencies)
 	summary.DetectorLatencyP50Ms = percentile(detectLatencies, 50)
 	summary.DetectorLatencyP95Ms = percentile(detectLatencies, 95)
@@ -789,7 +849,7 @@ func writeEventHeader(w *csv.Writer) {
 		"observed_at", "tx_hash", "from", "nonce", "payload_kind",
 		"fetch_ok", "fetch_attempts", "fetch_latency_ms",
 		"erc20", "erc20_method",
-		"detector_latency_ms", "detector_latency_us", "detector_latency_ns",
+		"detector_completed_at", "detector_latency_ms", "detector_latency_us", "detector_latency_ns",
 		"lookup_mean_ms", "lookup_mean_us", "lookup_mean_ns",
 		"lookup_p95_ms", "lookup_p95_us", "lookup_p95_ns",
 		"pending_interarrival_ms", "candidates_scored", "alerts",
@@ -809,6 +869,7 @@ func writeEventRow(w *csv.Writer, row microEventRow) {
 		fmt.Sprintf("%.6f", row.FetchLatencyMs),
 		strconv.FormatBool(row.ERC20),
 		row.ERC20Method,
+		formatOptionalTime(row.DetectorCompletedAt),
 		fmt.Sprintf("%.6f", row.DetectorLatencyMs),
 		fmt.Sprintf("%.3f", row.DetectorLatencyUs),
 		strconv.FormatInt(row.DetectorLatencyNs, 10),
@@ -828,6 +889,13 @@ func writeEventRow(w *csv.Writer, row microEventRow) {
 		row.MaxPriorityFeePerGas,
 		row.Error,
 	})
+}
+
+func formatOptionalTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339Nano)
 }
 
 func writeBlockHeader(w *csv.Writer) {
@@ -895,6 +963,8 @@ func buildRunManifest(cfg config.AppConfig, summary MicroBenchmarkSummary) runMa
 		AcceptanceMinBlocks:       summary.AcceptanceMinBlocks,
 		VisibilityValid:           summary.VisibilityValid,
 		VisibilityInvalidReason:   summary.VisibilityInvalidReason,
+		TelegramConfigured:        summary.TelegramConfigured,
+		TelegramReceiptSemantics:  "Bot API sendMessage acceptance proxy: message_id/date and local HTTP round-trip; Telegram does not expose end-user device notification or read receipt timing.",
 	}
 	if protectedErr != nil {
 		manifest.ProtectedAccountsHashError = protectedErr.Error()

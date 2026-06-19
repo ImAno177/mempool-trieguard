@@ -54,7 +54,7 @@ func TestFinalizeMicroSummaryVisibilityRates(t *testing.T) {
 		DetectorEvents:           4,
 		ERC20TransferCalls:       2,
 	}
-	finalizeMicroSummary(&summary, []float64{1, 3}, []float64{0.1, 0.3}, []float64{0.01, 0.03}, []float64{2, 4}, []float64{10, 20}, []float64{1000, 2000})
+	finalizeMicroSummary(&summary, []float64{1, 3}, []float64{0.1, 0.3}, []float64{0.01, 0.03}, []float64{2, 4}, []float64{10, 20}, []float64{1000, 2000}, []float64{30, 50}, []float64{40, 80}, []float64{100, 200})
 
 	if !closeFloat(summary.IncludedSeenPendingRate, 0.8) || !closeFloat(summary.IncludedVisibilityLossRate, 0.2) {
 		t.Fatalf("visibility rates = %.3f %.3f, want 0.8 0.2", summary.IncludedSeenPendingRate, summary.IncludedVisibilityLossRate)
@@ -70,6 +70,9 @@ func TestFinalizeMicroSummaryVisibilityRates(t *testing.T) {
 	}
 	if !closeFloat(summary.DetectorLatencyP50Us, 200) || !closeFloat(summary.LookupLatencyP95Ns, 29000) {
 		t.Fatalf("latency conversions detector_p50_us=%.3f lookup_p95_ns=%.3f", summary.DetectorLatencyP50Us, summary.LookupLatencyP95Ns)
+	}
+	if !closeFloat(summary.TelegramSendLatencyP50Ms, 40) || !closeFloat(summary.DetectorToTelegramP95Ms, 78) || !closeFloat(summary.PendingToTelegramP99Ms, 199) {
+		t.Fatalf("telegram latencies send_p50=%.3f detector_p95=%.3f pending_p99=%.3f", summary.TelegramSendLatencyP50Ms, summary.DetectorToTelegramP95Ms, summary.PendingToTelegramP99Ms)
 	}
 }
 
