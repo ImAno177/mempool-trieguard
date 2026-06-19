@@ -48,7 +48,9 @@ func main() {
 
 	if *liveBenchmarkDuration > 0 {
 		log.Printf("running live mempool micro-benchmark for %s", liveBenchmarkDuration.String())
-		summary, err := live.RunMicroBenchmark(context.Background(), cfg, st, *liveBenchmarkDuration, *liveBenchmarkOut)
+		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer stop()
+		summary, err := live.RunMicroBenchmark(ctx, cfg, st, *liveBenchmarkDuration, *liveBenchmarkOut)
 		if err != nil {
 			log.Fatalf("live micro-benchmark failed: %v", err)
 		}
