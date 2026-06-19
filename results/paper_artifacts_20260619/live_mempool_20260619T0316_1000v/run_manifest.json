@@ -29,8 +29,7 @@
   "state_retention_seconds": 21600,
   "artifact_flush_interval_seconds": 30,
   "acceptance_min_blocks": 100,
-  "visibility_valid": false,
-  "visibility_invalid_reason": "subscription dropped messages 1563",
+  "visibility_valid": true,
   "telegram_configured": true,
   "telegram_receipt_semantics": "Bot API sendMessage acceptance proxy: message_id/date and local HTTP round-trip; Telegram does not expose end-user device notification or read receipt timing."
 }

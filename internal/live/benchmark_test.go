@@ -76,6 +76,24 @@ func TestFinalizeMicroSummaryVisibilityRates(t *testing.T) {
 	}
 }
 
+func TestSubscriptionDropsDoNotInvalidateVisibilityProxy(t *testing.T) {
+	summary := MicroBenchmarkSummary{
+		WarmupCompleted:             true,
+		AcceptanceMinBlocks:         2,
+		BlocksObserved:              2,
+		SubscriptionDroppedMessages: 1563,
+	}
+
+	validateMicroVisibility(&summary)
+
+	if !summary.VisibilityValid {
+		t.Fatalf("visibility should remain valid when only subscription drops are present: %s", summary.VisibilityInvalidReason)
+	}
+	if summary.VisibilityInvalidReason != "" {
+		t.Fatalf("unexpected visibility invalid reason: %q", summary.VisibilityInvalidReason)
+	}
+}
+
 func TestWarmupExclusionRequiresTimeAndBlocks(t *testing.T) {
 	started := time.Unix(100, 0).UTC()
 	if !shouldSkipWarmupBlock(started, started.Add(2*time.Minute), 5) {

@@ -1,222 +1,259 @@
 {
-    "artifact":  "mempool_trieguard_paper_results_summary",
-    "generated_at_utc":  "2026-06-19T11:52:10Z",
-    "paper_source":  "paper/paper.tex local draft",
-    "dataset_scope":  {
-                          "total_rows":  34905969,
-                          "positives":  17365954,
-                          "negatives":  17516047,
-                          "shards":  256,
-                          "label_note":  "positives are zero-value, tiny-transfer, or counterfeit-token poisoning labels; negatives are valid intended transfers excluding poisoning/payoff rows"
-                      },
-    "rq1_detection_quality":  [
-                                  {
-                                      "method":  "confirmed_chain",
-                                      "precision":  1,
-                                      "recall":  0.283724,
-                                      "f1":  0.442033,
-                                      "false_alerts_per_account_per_day":  "1.87e-10",
-                                      "timing":  "post-confirmation"
-                                  },
-                                  {
-                                      "method":  "linear_scan",
-                                      "precision":  0.978671,
-                                      "recall":  0.965444,
-                                      "f1":  0.972012,
-                                      "false_alerts_per_account_per_day":  "9.12e-4",
-                                      "timing":  "pre-confirmation replay"
-                                  },
-                                  {
-                                      "method":  "address_only_trie",
-                                      "precision":  0.999988,
-                                      "recall":  0.957288,
-                                      "f1":  0.978172,
-                                      "false_alerts_per_account_per_day":  "3.44e-8",
-                                      "timing":  "pre-confirmation replay"
-                                  },
-                                  {
-                                      "method":  "mempool_trieguard",
-                                      "precision":  0.999923,
-                                      "recall":  0.957455,
-                                      "f1":  0.978229,
-                                      "false_alerts_per_account_per_day":  "1.59e-7",
-                                      "timing":  "pre-confirmation replay",
-                                      "tau_lr":  0.901
-                                  }
-                              ],
-    "rq2_full_replay_lookup":  [
-                                   {
-                                       "method":  "linear_scan",
-                                       "mean_ms":  0.143894,
-                                       "p95_ms":  1.070443,
-                                       "p99_ms":  2.258818,
-                                       "throughput_tps":  35475.12,
-                                       "average_candidates":  97.32
-                                   },
-                                   {
-                                       "method":  "mempool_trieguard",
-                                       "mean_ms":  0.003565,
-                                       "p95_ms":  0,
-                                       "p99_ms":  0.001209,
-                                       "throughput_tps":  179488.25,
-                                       "average_candidates":  2.8,
-                                       "tau_lr":  0.901
-                                   },
-                                   {
-                                       "method":  "db_index",
-                                       "mean_ms":  0.231254,
-                                       "p95_ms":  0.857766,
-                                       "p99_ms":  4.207447,
-                                       "throughput_tps":  4336.86,
-                                       "average_candidates":  2.8
-                                   },
-                                   {
-                                       "method":  "dblsh2_display",
-                                       "mean_ms":  0.504233,
-                                       "p95_ms":  2.977958,
-                                       "p99_ms":  6.177083,
-                                       "throughput_tps":  4837.21,
-                                       "average_candidates":  25.37
-                                   }
-                               ],
-    "rq2_controlled_10000_counterparties":  [
-                                                {
-                                                    "method":  "mempool_trieguard",
-                                                    "mean_ms":  0.001443,
-                                                    "std_ms":  0.000387,
-                                                    "p95_ms":  0,
-                                                    "p99_ms":  0,
-                                                    "throughput_tps":  336493.6,
-                                                    "average_candidates":  1.03
-                                                },
-                                                {
-                                                    "method":  "linear_scan",
-                                                    "mean_ms":  0.211963,
-                                                    "std_ms":  0.001097,
-                                                    "p95_ms":  1.006308,
-                                                    "p99_ms":  1.482579,
-                                                    "throughput_tps":  4696.11,
-                                                    "average_candidates":  833
-                                                },
-                                                {
-                                                    "method":  "db_index",
-                                                    "mean_ms":  0.342162,
-                                                    "std_ms":  0.008943,
-                                                    "p95_ms":  1.873282,
-                                                    "p99_ms":  6.042491,
-                                                    "throughput_tps":  2887.92,
-                                                    "average_candidates":  1.03
-                                                },
-                                                {
-                                                    "method":  "dblsh2_display",
-                                                    "mean_ms":  0.247552,
-                                                    "std_ms":  0.04225,
-                                                    "p95_ms":  1.081068,
-                                                    "p99_ms":  4.962373,
-                                                    "throughput_tps":  4111.74,
-                                                    "average_candidates":  179.49
-                                                }
-                                            ],
-    "rq3_lr_feature_ablation":  [
-                                    {
-                                        "variant":  "full_addr_type_token",
-                                        "runs":  30,
-                                        "precision_mean":  0.999825,
-                                        "recall_mean":  0.960052,
-                                        "f1_mean":  0.979535
-                                    },
-                                    {
-                                        "variant":  "no_token",
-                                        "runs":  30,
-                                        "precision_mean":  0.999991,
-                                        "recall_mean":  0.959857,
-                                        "f1_mean":  0.979513
-                                    },
-                                    {
-                                        "variant":  "address_only",
-                                        "runs":  30,
-                                        "precision_mean":  0.999991,
-                                        "recall_mean":  0.959855,
-                                        "f1_mean":  0.979512
-                                    },
-                                    {
-                                        "variant":  "no_type",
-                                        "runs":  30,
-                                        "precision_mean":  0.999989,
-                                        "recall_mean":  0.959855,
-                                        "f1_mean":  0.979511
-                                    },
-                                    {
-                                        "variant":  "suffix_only",
-                                        "runs":  30,
-                                        "precision_mean":  0.999858,
-                                        "recall_mean":  0.959974,
-                                        "f1_mean":  0.979511
-                                    },
-                                    {
-                                        "variant":  "prefix_only",
-                                        "runs":  30,
-                                        "precision_mean":  0.998613,
-                                        "recall_mean":  0.959966,
-                                        "f1_mean":  0.978909
-                                    }
-                                ],
-    "rq4_pending_visibility_loss_simulation":  [
-                                                   {
-                                                       "loss_rate":  0,
-                                                       "precision":  0.999923,
-                                                       "recall":  0.957455,
-                                                       "f1":  0.978229
-                                                   },
-                                                   {
-                                                       "loss_rate":  0.1,
-                                                       "precision":  0.999923,
-                                                       "recall":  0.861707,
-                                                       "f1":  0.925684
-                                                   },
-                                                   {
-                                                       "loss_rate":  0.25,
-                                                       "precision":  0.999921,
-                                                       "recall":  0.718047,
-                                                       "f1":  0.83586
-                                                   },
-                                                   {
-                                                       "loss_rate":  0.5,
-                                                       "precision":  0.999924,
-                                                       "recall":  0.478557,
-                                                       "f1":  0.647314
-                                                   }
-                                               ],
-    "live_mempool_microbenchmark":  {
-                                        "source_dir":  "results/paper_artifacts_20260619/live_mempool_20260619T0316_1000v",
-                                        "started_at":  "2026-06-19T03:13:38.356181282Z",
-                                        "ended_at":  "2026-06-19T09:13:38.357249811Z",
-                                        "duration_seconds":  21600.001068529,
-                                        "pending_messages":  813092,
-                                        "pending_messages_per_second":  37.643146285981786,
-                                        "erc20_transfer_calls":  245540,
-                                        "erc20_transfer_calls_per_second":  11.36759203024992,
-                                        "post_warmup_blocks":  1791,
-                                        "included_transactions":  458667,
-                                        "detector_latency_p99_ms":  0.016519089999999965,
-                                        "lookup_latency_p99_ms":  0.023419989999999846,
-                                        "pending_to_telegram_accept_p99_ms":  956.20820239999989,
-                                        "telegram_alerts_sent":  121,
-                                        "telegram_alerts_failed":  0,
-                                        "included_seen_pending":  261427,
-                                        "included_seen_pending_rate":  0.56997124275345734,
-                                        "included_visibility_loss_rate":  0.43002875724654266,
-                                        "included_erc20_transfers":  123056,
-                                        "included_erc20_seen_pending":  93264,
-                                        "included_erc20_seen_pending_rate":  0.75789884280327657,
-                                        "included_erc20_visibility_loss_rate":  0.24210115719672343,
-                                        "visibility_semantics":  "provider-specific public pending-feed proxy, not global Ethereum mempool truth"
-                                    },
-    "source_artifacts":  [
-                             "results/paper_artifacts_20260619/live_mempool_20260619T0316_1000v/live_mempool_metrics.json",
-                             "results/paper_artifacts_20260619/live_mempool_20260619T0316_1000v/run_manifest.json",
-                             "results/paper_artifacts_20260619/live_mempool_20260619T0316_1000v/live_mempool_alerts.jsonl",
-                             "results/paper_artifacts_20260619/protected_accounts/live_active_protected_accounts_24h_1000victims.json.manifest.json",
-                             "results/paper_artifacts_20260619/rq3_lr_feature_ablation/summary_aggregate.json"
-                         ]
+  "artifact": "mempool_trieguard_paper_results_summary",
+  "generated_at_utc": "2026-06-19T11:52:10Z",
+  "paper_source": "paper/paper.tex local draft",
+  "dataset_scope": {
+    "total_rows": 34905969,
+    "positives": 17365954,
+    "negatives": 17516047,
+    "shards": 256,
+    "label_note": "positives are zero-value, tiny-transfer, or counterfeit-token poisoning labels; negatives are valid intended transfers excluding poisoning/payoff rows"
+  },
+  "rq1_detection_quality": [
+    {
+      "method": "confirmed_chain",
+      "precision": 1,
+      "recall": 0.283724,
+      "f1": 0.442033,
+      "false_alerts_per_account_per_day": "1.87e-10",
+      "timing": "post-confirmation"
+    },
+    {
+      "method": "linear_scan",
+      "precision": 0.978671,
+      "recall": 0.965444,
+      "f1": 0.972012,
+      "false_alerts_per_account_per_day": "9.12e-4",
+      "timing": "pre-confirmation replay"
+    },
+    {
+      "method": "address_only_trie",
+      "precision": 0.999988,
+      "recall": 0.957288,
+      "f1": 0.978172,
+      "false_alerts_per_account_per_day": "3.44e-8",
+      "timing": "pre-confirmation replay"
+    },
+    {
+      "method": "mempool_trieguard",
+      "precision": 0.999923,
+      "recall": 0.957455,
+      "f1": 0.978229,
+      "false_alerts_per_account_per_day": "1.59e-7",
+      "timing": "pre-confirmation replay",
+      "tau_lr": 0.901
+    }
+  ],
+  "rq2_full_replay_lookup": [
+    {
+      "method": "linear_scan",
+      "mean_ms": 0.143894,
+      "p95_ms": 1.070443,
+      "p99_ms": 2.258818,
+      "throughput_tps": 35475.12,
+      "average_candidates": 97.32
+    },
+    {
+      "method": "mempool_trieguard",
+      "mean_ms": 0.003565,
+      "p95_ms": 0,
+      "p99_ms": 0.001209,
+      "throughput_tps": 179488.25,
+      "average_candidates": 2.8,
+      "tau_lr": 0.901
+    },
+    {
+      "method": "db_index",
+      "mean_ms": 0.231254,
+      "p95_ms": 0.857766,
+      "p99_ms": 4.207447,
+      "throughput_tps": 4336.86,
+      "average_candidates": 2.8
+    },
+    {
+      "method": "dblsh2_display",
+      "mean_ms": 0.504233,
+      "p95_ms": 2.977958,
+      "p99_ms": 6.177083,
+      "throughput_tps": 4837.21,
+      "average_candidates": 25.37
+    }
+  ],
+  "rq2_controlled_10000_counterparties": [
+    {
+      "method": "mempool_trieguard",
+      "mean_ms": 0.001443,
+      "std_ms": 0.000387,
+      "p95_ms": 0,
+      "p99_ms": 0,
+      "throughput_tps": 336493.6,
+      "average_candidates": 1.03
+    },
+    {
+      "method": "linear_scan",
+      "mean_ms": 0.211963,
+      "std_ms": 0.001097,
+      "p95_ms": 1.006308,
+      "p99_ms": 1.482579,
+      "throughput_tps": 4696.11,
+      "average_candidates": 833
+    },
+    {
+      "method": "db_index",
+      "mean_ms": 0.342162,
+      "std_ms": 0.008943,
+      "p95_ms": 1.873282,
+      "p99_ms": 6.042491,
+      "throughput_tps": 2887.92,
+      "average_candidates": 1.03
+    },
+    {
+      "method": "dblsh2_display",
+      "mean_ms": 0.247552,
+      "std_ms": 0.04225,
+      "p95_ms": 1.081068,
+      "p99_ms": 4.962373,
+      "throughput_tps": 4111.74,
+      "average_candidates": 179.49
+    }
+  ],
+  "rq3_lr_feature_ablation": [
+    {
+      "variant": "full_addr_type_token",
+      "runs": 30,
+      "precision_mean": 0.999825,
+      "recall_mean": 0.960052,
+      "f1_mean": 0.979535,
+      "f1_std": 5.289578815645207e-07,
+      "delta_f1_vs_full_mean": 0.0,
+      "delta_f1_vs_full_std": 0.0,
+      "delta_f1_vs_full_mean_x1e5": 0.0,
+      "delta_f1_vs_full_std_x1e5": 0.0
+    },
+    {
+      "variant": "no_token",
+      "runs": 30,
+      "precision_mean": 0.999991,
+      "recall_mean": 0.959857,
+      "f1_mean": 0.979513,
+      "f1_std": 4.516810283266961e-16,
+      "delta_f1_vs_full_mean": -2.2458918922067343e-05,
+      "delta_f1_vs_full_std": 5.289578815645208e-07,
+      "delta_f1_vs_full_mean_x1e5": -2.25,
+      "delta_f1_vs_full_std_x1e5": 0.05
+    },
+    {
+      "variant": "address_only",
+      "runs": 30,
+      "precision_mean": 0.999991,
+      "recall_mean": 0.959855,
+      "f1_mean": 0.979512,
+      "f1_std": 4.516810283266961e-16,
+      "delta_f1_vs_full_mean": -2.3263996497783582e-05,
+      "delta_f1_vs_full_std": 5.289578815645208e-07,
+      "delta_f1_vs_full_mean_x1e5": -2.33,
+      "delta_f1_vs_full_std_x1e5": 0.05
+    },
+    {
+      "variant": "no_type",
+      "runs": 30,
+      "precision_mean": 0.999989,
+      "recall_mean": 0.959855,
+      "f1_mean": 0.979511,
+      "f1_std": 3.387607712450221e-16,
+      "delta_f1_vs_full_mean": -2.441160304246607e-05,
+      "delta_f1_vs_full_std": 5.289578815645208e-07,
+      "delta_f1_vs_full_mean_x1e5": -2.44,
+      "delta_f1_vs_full_std_x1e5": 0.05
+    },
+    {
+      "variant": "suffix_only",
+      "runs": 30,
+      "precision_mean": 0.999858,
+      "recall_mean": 0.959974,
+      "f1_mean": 0.979511,
+      "f1_std": 4.516810283266961e-16,
+      "delta_f1_vs_full_mean": -2.478402126739147e-05,
+      "delta_f1_vs_full_std": 5.289578815645208e-07,
+      "delta_f1_vs_full_mean_x1e5": -2.48,
+      "delta_f1_vs_full_std_x1e5": 0.05
+    },
+    {
+      "variant": "prefix_only",
+      "runs": 30,
+      "precision_mean": 0.998613,
+      "recall_mean": 0.959966,
+      "f1_mean": 0.978909,
+      "f1_std": 6.616236288862842e-08,
+      "delta_f1_vs_full_mean": -0.0006267756030169158,
+      "delta_f1_vs_full_std": 4.911228080367809e-07,
+      "delta_f1_vs_full_mean_x1e5": -62.68,
+      "delta_f1_vs_full_std_x1e5": 0.05
+    }
+  ],
+  "rq4_pending_visibility_loss_simulation": [
+    {
+      "loss_rate": 0,
+      "precision": 0.999923,
+      "recall": 0.957455,
+      "f1": 0.978229
+    },
+    {
+      "loss_rate": 0.1,
+      "precision": 0.999923,
+      "recall": 0.861707,
+      "f1": 0.925684
+    },
+    {
+      "loss_rate": 0.25,
+      "precision": 0.999921,
+      "recall": 0.718047,
+      "f1": 0.83586
+    },
+    {
+      "loss_rate": 0.5,
+      "precision": 0.999924,
+      "recall": 0.478557,
+      "f1": 0.647314
+    }
+  ],
+  "live_mempool_microbenchmark": {
+    "source_dir": "results/paper_artifacts_20260619/live_mempool_20260619T0316_1000v",
+    "started_at": "2026-06-19T03:13:38.356181282Z",
+    "ended_at": "2026-06-19T09:13:38.357249811Z",
+    "duration_seconds": 21600.001068529,
+    "pending_messages": 813092,
+    "pending_messages_per_second": 37.643146285981786,
+    "erc20_transfer_calls": 245540,
+    "erc20_transfer_calls_per_second": 11.36759203024992,
+    "post_warmup_blocks": 1791,
+    "included_transactions": 458667,
+    "detector_latency_p99_ms": 0.016519089999999965,
+    "lookup_latency_p99_ms": 0.023419989999999846,
+    "pending_to_telegram_accept_p99_ms": 956.2082023999999,
+    "telegram_alerts_sent": 121,
+    "telegram_alerts_failed": 0,
+    "included_seen_pending": 261427,
+    "included_seen_pending_rate": 0.5699712427534573,
+    "included_visibility_loss_rate": 0.43002875724654266,
+    "included_erc20_transfers": 123056,
+    "included_erc20_seen_pending": 93264,
+    "included_erc20_seen_pending_rate": 0.7578988428032766,
+    "included_erc20_visibility_loss_rate": 0.24210115719672343,
+    "visibility_semantics": "provider-specific public pending-feed proxy, not global Ethereum mempool truth",
+    "pending_interarrival_p50_ms": 1.939635,
+    "pending_interarrival_p99_ms": 339.68425999999977,
+    "subscription_reconnects": 3,
+    "subscription_errors": 3,
+    "subscription_dropped_messages": 1563,
+    "visibility_valid": true,
+    "message_channel_accept_p99_ms": 956.2082023999999
+  },
+  "source_artifacts": [
+    "results/paper_artifacts_20260619/live_mempool_20260619T0316_1000v/live_mempool_metrics.json",
+    "results/paper_artifacts_20260619/live_mempool_20260619T0316_1000v/run_manifest.json",
+    "results/paper_artifacts_20260619/live_mempool_20260619T0316_1000v/live_mempool_alerts.jsonl",
+    "results/paper_artifacts_20260619/protected_accounts/live_active_protected_accounts_24h_1000victims.json.manifest.json",
+    "results/paper_artifacts_20260619/rq3_lr_feature_ablation/summary_aggregate.json"
+  ]
 }

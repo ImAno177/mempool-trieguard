@@ -1,0 +1,19 @@
+group,measurement,value,unit,note
+Observation window,Duration,6,h,Six-hour accepted live run
+Observation window,Pending messages,813092,count,Provider pending-feed messages processed
+Observation window,Pending messages per second,37.643146285981786,messages/s,Run-average arrival rate
+Observation window,ERC-20 transfer calls,245540,count,"Direct transfer(address,uint256) calls"
+Observation window,Post-warmup blocks,1791,count,Visibility denominator blocks
+Feed pressure,Pending inter-arrival p50,1.939635,ms,Observed pending-feed inter-arrival median
+Feed pressure,Pending inter-arrival p99,339.68425999999977,ms,Observed pending-feed inter-arrival p99
+Detector path,Detector p99 latency,0.016519089999999965,ms,In-process detector elapsed time
+Detector path,Lookup p99 latency,0.023419989999999846,ms,In-process trie lookup elapsed time
+Notification path,Message-channel acceptance p99,956.2082023999999,ms,Telegram Bot API sendMessage acceptance proxy
+Notification path,Message dispatches accepted,121,count,Accepted by messaging endpoint
+Visibility proxy,All included seen pending,56.99712427534573,%,Included transactions observed before block inclusion
+Visibility proxy,All included visibility loss,43.00287572465427,%,1 - seen pending rate
+Visibility proxy,ERC-20 seen pending,75.78988428032766,%,Direct ERC-20 transfer-call included txs observed pending
+Visibility proxy,ERC-20 visibility loss,24.21011571967234,%,1 - ERC-20 seen pending rate
+Operational counters,Subscription reconnects,3,count,Provider WebSocket reconnects
+Operational counters,Subscription errors,3,count,Provider WebSocket read errors
+Operational counters,Internal subscription drops,1563,count,Dropped inside local subscription channel; retained as audit counter

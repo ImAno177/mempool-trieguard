@@ -130,7 +130,7 @@ go run ./cmd/server --config configs\app.yaml `
   --live-benchmark-out results\live_mempool_YYYYMMDD_HHMM
 ```
 
-The committed VPS run used `drpc_pendingTransactions`, a 60-second or 5-block warmup exclusion, sequential block accounting, and Telegram Bot API `sendMessage` acceptance timing. Visibility loss is provider-specific public-feed visibility: `1 - included_seen_pending_rate`, not global mempool truth.
+The committed VPS run used `drpc_pendingTransactions`, a 60-second or 5-block warmup exclusion, sequential block accounting, and message-channel acceptance timing through the Telegram Bot API. Visibility loss is provider-specific public-feed visibility: `1 - included_seen_pending_rate`, not global mempool truth.
 
 ## Result Artifacts
 
@@ -148,6 +148,10 @@ results/paper_artifacts_20260619/
     rq3_lr_feature_ablation.csv
     rq4_pending_visibility_loss_simulation.csv
     live_mempool_microbenchmark.csv
+  graphica/
+    live_mempool_alerts_tidy.csv
+    live_mempool_microbenchmark_tidy.csv
+    mempool_trieguard_evidence_graph.csv
   live_mempool_20260619T0316_1000v/
     live_mempool_metrics.json
     live_mempool_blocks.csv
@@ -161,15 +165,15 @@ results/paper_artifacts_20260619/
     summary_aggregate.json
 ```
 
-The full live `live_mempool_events.csv` from the six-hour run is not committed because it is about 244 MB. Raw SQL, Parquet caches, RPC caches, binaries, and local manuscript drafts are also ignored.
+The full live `live_mempool_events.csv` from the six-hour run is not committed because it is about 244 MB; it is intended for the final archival replication package, such as Zenodo. Raw SQL, Parquet caches, RPC caches, binaries, and local manuscript drafts are also ignored.
 
 ## Reference Numbers
 
 - RQ1 learned LR row: precision `0.999923`, recall `0.957455`, F1 `0.978229`.
 - RQ2 full replay lookup: `mempool_trieguard` mean `0.003565` ms vs `linear_scan` mean `0.143894` ms.
-- RQ3 calibrated LR ablation: full address+type+token F1 mean `0.979535`; address-only F1 mean `0.979512`.
+- RQ3 calibrated LR ablation: full address+type+token F1 mean `0.979535`; address-only F1 mean `0.979512`, delta `-2.33e-5 ± 0.05e-5` relative to the full row.
 - RQ4 simulated pending loss: recall falls from `0.957455` at `0%` loss to `0.478557` at `50%` loss.
-- Live run: `813,092` pending messages over six hours, detector p99 `0.016519` ms, lookup p99 `0.023420` ms, Telegram acceptance p99 `956.208` ms, visibility loss `43.003%` for all included transactions and `24.210%` for direct ERC-20 transfer calls.
+- Live run: `813,092` pending messages over six hours, detector p99 `0.016519` ms, lookup p99 `0.023420` ms, inter-arrival p50/p99 `1.940`/`339.684` ms, message-channel acceptance p99 `956.208` ms, visibility loss `43.003%` for all included transactions and `24.210%` for direct ERC-20 transfer calls.
 
 ## Artifact Policy
 

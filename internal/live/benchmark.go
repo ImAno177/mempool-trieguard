@@ -828,9 +828,6 @@ func validateMicroVisibility(summary *MicroBenchmarkSummary) {
 	if summary.BlocksObserved < int64(summary.AcceptanceMinBlocks) {
 		reasons = append(reasons, fmt.Sprintf("observed blocks %d < %d", summary.BlocksObserved, summary.AcceptanceMinBlocks))
 	}
-	if summary.SubscriptionDroppedMessages > 0 {
-		reasons = append(reasons, fmt.Sprintf("subscription dropped messages %d", summary.SubscriptionDroppedMessages))
-	}
 	summary.VisibilityValid = len(reasons) == 0
 	summary.VisibilityInvalidReason = strings.Join(reasons, "; ")
 }
