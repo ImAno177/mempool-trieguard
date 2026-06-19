@@ -19,7 +19,7 @@ if [[ -f .env ]]; then
   set +a
 fi
 
-: "${APP_PROTECTED_ACCOUNTS_PATH:=results/live_active_protected_accounts_6h_50victims.json}"
+: "${APP_PROTECTED_ACCOUNTS_PATH:=results/live_active_protected_accounts_24h_1000victims.json}"
 export APP_PROTECTED_ACCOUNTS_PATH
 export LIVE_BENCHMARK_REGION="${LIVE_BENCHMARK_REGION:-unknown}"
 
