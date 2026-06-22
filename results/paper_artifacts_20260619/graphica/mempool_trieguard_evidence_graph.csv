@@ -4,7 +4,7 @@ Id;Label;Type;Value;Unit
 "replay";"Ethereum replay benchmark";"experiment";"34905969";"rows"
 "rq1";"RQ1 detection quality";"result";"0.978229";"F1"
 "rq2";"RQ2 lookup cost";"result";"40.36";"x faster than linear scan"
-"rq3";"RQ3 feature ablation";"result";"2.33";"delta F1 x1e-5 over address-only"
+"rq3";"RQ3 feature ablation";"result";"5.99";"MTG vs address-only delta F1 x1e-5"
 "rq4";"RQ4 pending visibility simulation";"result";"0.478557";"recall at 50% loss"
 "live";"Six-hour live provider-feed run";"experiment";"813092";"pending messages"
 "detector";"Detector p99 latency";"metric";"0.016519089999999965";"ms"

@@ -1,11 +1,11 @@
 {
   "artifact": "paper_artifact_hashes",
-  "generated_at_utc": "2026-06-19T16:16:07Z",
+  "generated_at_utc": "2026-06-22T12:15:16Z",
   "files": [
     {
       "path": "artifact_inventory.csv",
-      "bytes": 2272,
-      "sha256": "dde4817c8a83d936eae5213443919caba82855a4e926f287fa026d418a0871cf"
+      "bytes": 2393,
+      "sha256": "a2620ea3b2df2b6c2f2564f0118ae24c9d800fb14b32a568f2c5097807886c9f"
     },
     {
       "path": "graphica\\live_mempool_alerts_tidy.csv",
@@ -19,8 +19,8 @@
     },
     {
       "path": "graphica\\mempool_trieguard_evidence_graph.csv",
-      "bytes": 1504,
-      "sha256": "20d2085fd012d95b5e9c7df4e20da54e8b621ab9f77ddc0965a90869c0b40ca6"
+      "bytes": 1506,
+      "sha256": "ddb380475bce97441ccf0f6950daa4b131bfda69ff6055077c495e78d94a71ec"
     },
     {
       "path": "live_mempool_20260619T0316_1000v\\live_mempool_alerts.jsonl",
@@ -44,8 +44,8 @@
     },
     {
       "path": "paper_results_summary.json",
-      "bytes": 7939,
-      "sha256": "3e6d0ae91a909dc6597b347e7647f85a2d20fab212b5daa58ef705882fa5b40a"
+      "bytes": 9978,
+      "sha256": "649672c4fa2c8f8f0cb0d4c1983d509e37ec98b4be59678dda30c5c6ca5fc03e"
     },
     {
       "path": "protected_accounts\\live_active_protected_accounts_24h_1000victims.json",
@@ -64,8 +64,13 @@
     },
     {
       "path": "rq3_lr_feature_ablation\\summary_aggregate.json",
-      "bytes": 10350,
-      "sha256": "57a9491d7177bf6e78f487f2d69a729b83f91a47664f646d03fea25b75cb04f5"
+      "bytes": 13978,
+      "sha256": "13a2b63eed84704db3356e786efad91227f671fcef36d19608d0c58d93c317c8"
+    },
+    {
+      "path": "rq3_lr_feature_ablation\\summary_by_run.csv",
+      "bytes": 26069,
+      "sha256": "babe89657429b815dd1b74392d8dab055d0b7ec2a4f044db519a0b7d9e67dc55"
     },
     {
       "path": "tables\\live_mempool_microbenchmark.csv",
@@ -89,8 +94,8 @@
     },
     {
       "path": "tables\\rq3_lr_feature_ablation.csv",
-      "bytes": 769,
-      "sha256": "451324388ce0d3b4402e81b864d8803bd3b2bdbc367f528bde014cc24cdf9ccc"
+      "bytes": 1999,
+      "sha256": "0a329766c233a448b31a00df022a32035001eb59b68ec39c03a4766e474da738"
     },
     {
       "path": "tables\\rq4_pending_visibility_loss_simulation.csv",

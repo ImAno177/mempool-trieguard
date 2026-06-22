@@ -79,7 +79,7 @@ pdflatex -interaction=nonstopmode -halt-on-error paper.tex
 - Main replay row: precision 0.999923, recall 0.957455, F1 0.978229 at `tau=0.901`.
 - Full-replay lookup: `mempool_trieguard` mean 0.003565 ms vs `linear_scan` 0.143894 ms.
 - Controlled 10,000-counterparty lookup: trie 0.001443 ms, linear scan 0.211963 ms, DB index 0.342162 ms, DB-LSH-style 0.247552 ms.
-- RQ3 calibrated LR feature ablation: full address+type+token F1 mean 0.979535, address-only 0.979512, delta -2.33e-5 +/- 0.05e-5 relative to the full row.
+- RQ3 calibrated LR feature ablation: deployed MTG feature-sample F1 0.979324, address-only LR ablation F1 mean 0.979264, delta -5.99e-5 relative to the deployed feature-sample row.
 - Live run: 813,092 pending messages over six hours, detector p99 0.016519 ms, lookup p99 0.023420 ms, pending inter-arrival p50/p99 1.940/339.684 ms, message-channel acceptance p99 956.208 ms.
 - Live visibility proxy: 43.003% for all included transactions and 24.210% for included direct ERC-20 transfer calls.
 

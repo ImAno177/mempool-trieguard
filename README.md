@@ -163,6 +163,7 @@ results/paper_artifacts_20260619/
     selected_victims_summary.csv
   rq3_lr_feature_ablation/
     summary_aggregate.json
+    summary_by_run.csv
 ```
 
 The full live `live_mempool_events.csv` from the six-hour run is not committed because it is about 244 MB; it is intended for the final archival replication package, such as Zenodo. Raw SQL, Parquet caches, RPC caches, binaries, and local manuscript drafts are also ignored.
@@ -171,7 +172,7 @@ The full live `live_mempool_events.csv` from the six-hour run is not committed b
 
 - RQ1 learned LR row: precision `0.999923`, recall `0.957455`, F1 `0.978229`.
 - RQ2 full replay lookup: `mempool_trieguard` mean `0.003565` ms vs `linear_scan` mean `0.143894` ms.
-- RQ3 calibrated LR ablation: full address+type+token F1 mean `0.979535`; address-only F1 mean `0.979512`, delta `-2.33e-5 ± 0.05e-5` relative to the full row.
+- RQ3 calibrated LR ablation: deployed MTG feature-sample F1 `0.979324`; address-only LR ablation F1 mean `0.979264`, delta `-5.99e-5` relative to the deployed feature-sample row.
 - RQ4 simulated pending loss: recall falls from `0.957455` at `0%` loss to `0.478557` at `50%` loss.
 - Live run: `813,092` pending messages over six hours, detector p99 `0.016519` ms, lookup p99 `0.023420` ms, inter-arrival p50/p99 `1.940`/`339.684` ms, message-channel acceptance p99 `956.208` ms, visibility loss `43.003%` for all included transactions and `24.210%` for direct ERC-20 transfer calls.
 
