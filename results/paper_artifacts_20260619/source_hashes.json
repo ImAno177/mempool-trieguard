@@ -1,11 +1,11 @@
 {
   "artifact": "paper_artifact_hashes",
-  "generated_at_utc": "2026-06-22T12:15:16Z",
+  "generated_at_utc": "2026-06-22T12:36:05Z",
   "files": [
     {
       "path": "artifact_inventory.csv",
       "bytes": 2393,
-      "sha256": "a2620ea3b2df2b6c2f2564f0118ae24c9d800fb14b32a568f2c5097807886c9f"
+      "sha256": "0cb9342dc08dadcdd942b678c7b5e313827c7eef77728a78885a8edf697a61e6"
     },
     {
       "path": "graphica\\live_mempool_alerts_tidy.csv",
@@ -44,8 +44,8 @@
     },
     {
       "path": "paper_results_summary.json",
-      "bytes": 9978,
-      "sha256": "649672c4fa2c8f8f0cb0d4c1983d509e37ec98b4be59678dda30c5c6ca5fc03e"
+      "bytes": 9468,
+      "sha256": "e7a75887479c3018193d51c6337bdea554cfc458cfe4fce17f1453f61daeb1a1"
     },
     {
       "path": "protected_accounts\\live_active_protected_accounts_24h_1000victims.json",
@@ -64,8 +64,8 @@
     },
     {
       "path": "rq3_lr_feature_ablation\\summary_aggregate.json",
-      "bytes": 13978,
-      "sha256": "13a2b63eed84704db3356e786efad91227f671fcef36d19608d0c58d93c317c8"
+      "bytes": 13468,
+      "sha256": "9165c5897fa370a80f739c5de3acf851501d55e4db1f272749c1ef6fddbf33a8"
     },
     {
       "path": "rq3_lr_feature_ablation\\summary_by_run.csv",
@@ -94,8 +94,8 @@
     },
     {
       "path": "tables\\rq3_lr_feature_ablation.csv",
-      "bytes": 1999,
-      "sha256": "0a329766c233a448b31a00df022a32035001eb59b68ec39c03a4766e474da738"
+      "bytes": 1744,
+      "sha256": "1ba7a02d49f0a9f74702db892f4199e54789ef2f8846bea0210620f125e0d6a1"
     },
     {
       "path": "tables\\rq4_pending_visibility_loss_simulation.csv",
