@@ -124,7 +124,7 @@ class RPCClient:
                 self.http_requests += 1
                 self.rpc_items += len(requests)
                 resp = self.session.post(self.url, json=payload, headers=headers, timeout=self.timeout)
-                if resp.status_code == 429 or resp.status_code >= 500:
+                if resp.status_code in (408, 429) or resp.status_code >= 500:
                     raise RetryableRPCError(f"RPC HTTP {resp.status_code}: {resp.text[:300]}")
                 if 400 <= resp.status_code < 500:
                     raise NonRetryableRPCError(f"RPC HTTP {resp.status_code}: {resp.text[:300]}")
@@ -143,7 +143,7 @@ class RPCClient:
                     if item.get("error"):
                         message = item["error"].get("message", "")
                         code = item["error"].get("code", "")
-                        if "too many" in message.lower() or "rate" in message.lower():
+                        if code == 30 or "timeout" in message.lower() or "too many" in message.lower() or "rate" in message.lower():
                             raise RetryableRPCError(f"RPC error {code}: {message}")
                         raise NonRetryableRPCError(f"RPC error {code}: {message}")
                     results_by_id[int(item.get("id", 1))] = item.get("result")
@@ -322,7 +322,20 @@ def select_victims(
             if probed >= contract_probe_limit:
                 break
             probed += 1
-            has_code = account_has_code(client, victim)
+            try:
+                has_code = account_has_code(client, victim)
+            except Exception as exc:
+                print(
+                    json.dumps(
+                        {
+                            "contract_probe_error": victim,
+                            "error": str(exc)[:240],
+                        },
+                        sort_keys=True,
+                    ),
+                    flush=True,
+                )
+                has_code = False
             code_cache[victim] = has_code
             if has_code:
                 continue
