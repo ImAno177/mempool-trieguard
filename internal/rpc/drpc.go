@@ -17,6 +17,8 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const subscriptionRawMessageBuffer = 65536
+
 type Client struct {
 	HTTPURL string
 	WSSURL  string
@@ -181,6 +183,7 @@ type Subscription struct {
 	Errors         chan error
 	cancelOnce     sync.Once
 	cancelFn       context.CancelFunc
+	done           <-chan struct{}
 	dropped        atomic.Int64
 }
 
@@ -222,9 +225,10 @@ func (c *Client) Subscribe(ctx context.Context, methodName string) (*Subscriptio
 	s := &Subscription{
 		Conn:           conn,
 		SubscriptionID: subID,
-		RawMessages:    make(chan json.RawMessage, 512),
+		RawMessages:    make(chan json.RawMessage, subscriptionRawMessageBuffer),
 		Errors:         make(chan error, 8),
 		cancelFn:       cancel,
+		done:           ctxRun.Done(),
 	}
 	go s.readLoop(ctxRun)
 	return s, nil
@@ -279,10 +283,14 @@ func (s *Subscription) readLoop(ctx context.Context) {
 
 func (s *Subscription) enqueueRawMessage(raw json.RawMessage) bool {
 	select {
+	case <-s.done:
+		return false
+	default:
+	}
+	select {
 	case s.RawMessages <- raw:
 		return true
-	default:
-		s.dropped.Add(1)
+	case <-s.done:
 		return false
 	}
 }

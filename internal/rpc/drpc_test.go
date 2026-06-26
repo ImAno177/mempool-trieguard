@@ -3,6 +3,7 @@ package rpc
 import (
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 func TestParseERC20TransferCallTransfer(t *testing.T) {
@@ -47,12 +48,35 @@ func TestParseERC20TransferCallTransferFrom(t *testing.T) {
 	}
 }
 
-func TestSubscriptionDropCounter(t *testing.T) {
-	sub := &Subscription{RawMessages: make(chan json.RawMessage)}
-	if sub.enqueueRawMessage(json.RawMessage(`"0xabc"`)) {
-		t.Fatalf("enqueue should drop when channel has no receiver")
+func TestSubscriptionBufferedEnqueueDoesNotDropWithoutReceiver(t *testing.T) {
+	done := make(chan struct{})
+	sub := &Subscription{RawMessages: make(chan json.RawMessage, subscriptionRawMessageBuffer), done: done}
+	if !sub.enqueueRawMessage(json.RawMessage(`"0xabc"`)) {
+		t.Fatalf("enqueue should succeed into subscription buffer")
 	}
-	if got := sub.DroppedCount(); got != 1 {
-		t.Fatalf("dropped count = %d, want 1", got)
+	if got := sub.DroppedCount(); got != 0 {
+		t.Fatalf("dropped count = %d, want 0", got)
+	}
+	got := <-sub.RawMessages
+	if string(got) != `"0xabc"` {
+		t.Fatalf("raw message = %s", string(got))
+	}
+}
+
+func TestSubscriptionEnqueueStopsWhenClosed(t *testing.T) {
+	done := make(chan struct{})
+	close(done)
+	sub := &Subscription{RawMessages: make(chan json.RawMessage), done: done}
+	result := make(chan bool, 1)
+	go func() {
+		result <- sub.enqueueRawMessage(json.RawMessage(`"0xabc"`))
+	}()
+	select {
+	case ok := <-result:
+		if ok {
+			t.Fatalf("enqueue should stop when subscription is closed")
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("enqueue did not stop after subscription close")
 	}
 }

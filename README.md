@@ -14,7 +14,7 @@ Mempool-TrieGuard is a Go and Python research prototype for pre-confirmation Eth
 | `python/benchmark_pipeline.py` | Dataset normalization, replay generation, benchmark orchestration, and CSV/JSON reports. |
 | `scripts/` | Smoke checks, active-account generation, VPS helpers, and risk-training utilities. |
 | `configs/app.yaml` | Default runtime configuration. |
-| `results/paper_artifacts_20260619/` | Committed paper artifact bundle. |
+| `results/paper_artifacts_20260619/` | Paper tables, manifests, and supporting result artifacts. |
 
 ## Setup
 
@@ -30,7 +30,7 @@ go build -o detector-cli.exe ./cmd/detector-cli
 go build -o server.exe ./cmd/server
 ```
 
-Set runtime secrets only through `.env` or the shell. Do not commit real RPC URLs, API keys, Telegram tokens, or passwords.
+Set runtime secrets only through `.env` or the shell.
 
 ```powershell
 $env:DRPC_HTTP_URL="https://lb.drpc.live/ethereum/<YOUR_KEY>"
@@ -90,7 +90,7 @@ python -u python/benchmark_pipeline.py `
   --token-cache results/rpc_cache/full_dataset_token_metadata_cache.json `
   --no-rpc-enrich `
   --loss-rates 0,0.10,0.25,0.50 `
-  --tau-grid 0.40 `
+  --tau-grid 0.901 `
   --benchmark-runs 1 `
   --jobs 12
 ```
@@ -101,6 +101,84 @@ Protocol rules:
 - The current `mempool_trieguard` paper row uses the learned LR score at validation-selected `tau=0.901`.
 - Do not tune thresholds on the test set.
 - Treat full-label tau sweeps as calibration diagnostics, not as replacements for the fixed-protocol tables.
+
+## Reproducing Paper Experiments
+
+The paper tables are produced from the normalized Parquet cache and the detector CLI. The commands below use timestamped output directories so repeated runs do not overwrite prior artifacts.
+
+RQ1 and RQ4 use the full-label replay. RQ1 reads `full_label_rq1.csv`; RQ4 reads `full_label_rq4_loss_robustness.csv`.
+
+```powershell
+go build -o detector-cli.exe ./cmd/detector-cli
+
+python -u python/benchmark_pipeline.py `
+  --full-label-replay `
+  --dataset-cache data/normalized/address_poisoning_ethereum.normalized.full.parquet `
+  --max-rows 0 `
+  --shard-count 256 `
+  --shard-batch-size 4 `
+  --results-dir results/reproduce_rq1_rq4_YYYYMMDD `
+  --detector-cli .\detector-cli.exe `
+  --token-cache results/rpc_cache/full_dataset_token_metadata_cache.json `
+  --no-rpc-enrich `
+  --loss-rates 0,0.10,0.25,0.50 `
+  --tau-grid 0.901 `
+  --benchmark-runs 1 `
+  --jobs 12
+```
+
+RQ2 full-replay lookup cost is written by the same run to `full_label_rq2_lookup_scaling.csv`. The controlled 10,000-counterparty scaling table is rerun from the fixed high-activity replay asset:
+
+```powershell
+python scripts\rerun_rq2_scaling.py `
+  --source-dir results\missing_experiments_20260523 `
+  --out-dir results\reproduce_rq2_scaling_YYYYMMDD `
+  --config configs\app.yaml `
+  --detector-cli .\detector-cli.exe `
+  --token-metadata results\rpc_cache\full_dataset_token_metadata_cache.json `
+  --runs 30 `
+  --sizes 10,100,1000,10000 `
+  --methods mempool_trieguard,linear_scan,db_index,dblsh2_display `
+  --jobs 6
+```
+
+RQ3 uses LR models trained separately for each ablation. First export the full feature sample from the full-label shards, then train 30 split-victim LR ablation runs and summarize them:
+
+```powershell
+python scripts\export_risk_training_dataset.py `
+  --shards-dir results\reproduce_rq1_rq4_YYYYMMDD\full_label_shards `
+  --source-manifest results\reproduce_rq1_rq4_YYYYMMDD\full_label_manifest.json `
+  --dataset-cache data\normalized\address_poisoning_ethereum.normalized.full.parquet `
+  --token-metadata results\rpc_cache\full_dataset_token_metadata_cache.json `
+  --out-dir results\reproduce_rq3_features_YYYYMMDD `
+  --jobs 12 `
+  --skip-block-number-enrich
+
+for ($i = 0; $i -lt 30; $i++) {
+  $run = "{0:D2}" -f $i
+  python scripts\learn_lr_feature_ablation.py `
+    --feature-dir results\reproduce_rq3_features_YYYYMMDD\features `
+    --out-dir results\reproduce_rq3_lr_ablation_YYYYMMDD\run_$run `
+    --split-column split_victim `
+    --seed $i `
+    --epochs 1 `
+    --threshold-grid-size 1000
+}
+
+python scripts\summarize_lr_ablation_runs.py `
+  --runs-dir results\reproduce_rq3_lr_ablation_YYYYMMDD `
+  --out-dir results\reproduce_rq3_lr_ablation_YYYYMMDD
+```
+
+Daily confidence intervals and paired lookup tests are computed from the full-label replay's daily metrics:
+
+```powershell
+python scripts\full_label_daily_stats.py `
+  --daily-metrics results\reproduce_rq1_rq4_YYYYMMDD\full_label_daily_metrics_by_day.csv `
+  --out-dir results\reproduce_daily_stats_YYYYMMDD `
+  --bootstrap-samples 10000 `
+  --seed 1337
+```
 
 ## Live Mempool Benchmark
 
@@ -130,11 +208,11 @@ go run ./cmd/server --config configs\app.yaml `
   --live-benchmark-out results\live_mempool_YYYYMMDD_HHMM
 ```
 
-The committed VPS run used `drpc_pendingTransactions`, a 60-second or 5-block warmup exclusion, sequential block accounting, and message-channel acceptance timing through the Telegram Bot API. Visibility loss is provider-specific public-feed visibility: `1 - included_seen_pending_rate`, not global mempool truth.
+The six-hour VPS run used `drpc_pendingTransactions`, a 60-second or 5-block warmup exclusion, sequential block accounting, and message-channel acceptance timing through the Telegram Bot API. Visibility loss is provider-specific public-feed visibility: `1 - included_seen_pending_rate`, not global mempool truth.
 
 ## Result Artifacts
 
-The committed artifact bundle contains the exact JSON/CSV/JSONL files used for the current paper tables and live supplement:
+The artifact bundle contains the JSON/CSV/JSONL files used for the paper tables and live supplement:
 
 ```text
 results/paper_artifacts_20260619/
@@ -166,16 +244,4 @@ results/paper_artifacts_20260619/
     summary_by_run.csv
 ```
 
-The full live `live_mempool_events.csv` from the six-hour run is not committed because it is about 244 MB; it is intended for the final archival replication package, such as Zenodo. Raw SQL, Parquet caches, RPC caches, binaries, and local manuscript drafts are also ignored.
-
-## Reference Numbers
-
-- RQ1 learned LR row: precision `0.999923`, recall `0.957455`, F1 `0.978229`.
-- RQ2 full replay lookup: `mempool_trieguard` mean `0.003565` ms vs `linear_scan` mean `0.143894` ms.
-- RQ3 calibrated LR ablation: deployed MTG feature-sample F1 `0.979324`; address-only LR ablation F1 mean `0.979264`, delta `-5.99e-5` relative to the deployed feature-sample row.
-- RQ4 simulated pending loss: recall falls from `0.957455` at `0%` loss to `0.478557` at `50%` loss.
-- Live run: `813,092` pending messages over six hours, detector p99 `0.016519` ms, lookup p99 `0.023420` ms, inter-arrival p50/p99 `1.940`/`339.684` ms, message-channel acceptance p99 `956.208` ms, visibility loss `43.003%` for all included transactions and `24.210%` for direct ERC-20 transfer calls.
-
-## Artifact Policy
-
-Commit code, config templates, root documentation, and curated paper artifacts. Do not commit `.env`, real provider URLs, API keys, raw datasets, `dataset/`, `dataset.zip`, `data/`, Parquet files, full generated `results/`, local binaries, or local manuscript drafts under `paper/`.
+The full live `live_mempool_events.csv` from the six-hour run is about 244 MB and is intended for the final archival replication package, such as Zenodo. Raw SQL, Parquet caches, RPC caches, binaries, and local manuscript drafts are not part of this repository.
