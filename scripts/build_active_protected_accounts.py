@@ -457,9 +457,27 @@ def main(argv: list[str]) -> int:
     scanned_transactions = 0
 
     scanned_blocks = 0
+    skipped_rpc_blocks: list[int] = []
+    skipped_rpc_errors: list[dict[str, Any]] = []
     for batch_start in range(from_block, to_block + 1, block_batch_size):
         numbers = list(range(batch_start, min(to_block, batch_start + block_batch_size - 1) + 1))
-        blocks = client.batch([("eth_getBlockByNumber", [hex(number), True]) for number in numbers])
+        try:
+            blocks = client.batch([("eth_getBlockByNumber", [hex(number), True]) for number in numbers])
+        except Exception as exc:
+            skipped_rpc_blocks.extend(numbers)
+            if len(skipped_rpc_errors) < 25:
+                skipped_rpc_errors.append({"blocks": numbers, "error": str(exc)[:300]})
+            print(
+                json.dumps(
+                    {
+                        "skipped_rpc_blocks": numbers,
+                        "error": str(exc)[:240],
+                    },
+                    sort_keys=True,
+                ),
+                flush=True,
+            )
+            continue
         for number, block in zip(numbers, blocks):
             scanned_blocks += 1
             if not block:
@@ -568,7 +586,11 @@ def main(argv: list[str]) -> int:
         "latest_block_at_start": latest,
         "from_block": from_block,
         "to_block": to_block,
-        "scanned_blocks": max(0, to_block - from_block + 1),
+        "requested_blocks": max(0, to_block - from_block + 1),
+        "scanned_blocks": scanned_blocks,
+        "skipped_rpc_blocks": len(skipped_rpc_blocks),
+        "skipped_rpc_block_numbers": skipped_rpc_blocks[:200],
+        "skipped_rpc_block_errors": skipped_rpc_errors,
         "scanned_transactions": scanned_transactions,
         "decoded_direct_erc20_calls": decoded_calls,
         "skipped_zero_value_calls": skipped_zero_value,
